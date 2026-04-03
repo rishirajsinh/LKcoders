@@ -112,10 +112,17 @@ function getSimulatedResponse(prompt) {
     return `👋 Namaste! I am your EduBase AI assistant. \n\nMain aapki class analytics, lesson planning, ya kisi bhi subject ke sawalon mein help kar sakta hoon. Aaj main aapki kaise madad karoon?`;
   }
 
+  if (lower.includes('student') || lower.includes('kitne')) {
+    return `📊 Class 10-A Overview:\n\nTotal students: **32**\n• Boys: 18\n• Girls: 14\n\nPresent today: **29** (90.6% attendance).\nAapko kisi specific student ka data chahiye?`;
+  }
+
   if (lower.includes('kaise') || lower.includes('help') || lower.includes('madad')) {
     return `🤝 Main aapki har tarah se help kar sakta hoon! \n\nAap mujhse analytics report mang sakte hain, ya phir kisi mushkil topic ko Hinglish mein samajh sakte hain. Bas apna sawal yahan likhiye.`;
   }
 
   // 3. Smart Universal Fallback
-  return `🤖 EduBase AI Assistant\n\nMaine aapka query analyze kiya: "${prompt}"\n\nAs your assistant, main ye sab bata sakta hoon:\n• 📘 Academic Support (Hinglish mein explanation)\n• 📊 Student Data Analysis\n• 🌍 General Knowledge\n• ✉️ Drafting Messages\n\nAap apna sawal thoda detail mein puchiye, main turant jawab dunga!`;
+  // Extract real query to avoid echoing system prompts
+  const cleanQuery = prompt.split('User Query:')[1]?.trim() || prompt.split('User Question:')[1]?.trim() || prompt;
+  
+  return `🤖 EduBase AI Assistant\n\nMain aapke is sawal par kaam kar sakta hoon: "${cleanQuery.slice(0, 50)}..."\n\nAs your assistant, main ye sab bata sakta hoon:\n• 📘 Academic Support (Hinglish mein explanation)\n• 📊 Student Data Analysis\n• 🌍 General Knowledge\n• ✉️ Drafting Messages\n\nAap thoda specific detail puchiye, main turant direct answer dunga!`;
 }
