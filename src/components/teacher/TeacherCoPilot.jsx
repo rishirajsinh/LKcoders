@@ -1,10 +1,23 @@
 import { useState, useEffect, useRef } from 'react';
 import useAI from '../../hooks/useAI';
 
+// Simple Markdown-ish formatter
+const formatMessage = (content) => {
+  if (!content) return '';
+  return content
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/• (.*?)\n/g, '<li>$1</li>')
+    .replace(/\n/g, '<br/>');
+};
+
 export default function TeacherCoPilot({ students, overview, activeSection }) {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
-    { role: 'assistant', content: "Hello! I'm your EduBase Co-pilot. How can I help you today?" }
+    { 
+      role: 'assistant', 
+      content: "Hello! I'm your EduBase AI Co-pilot. I can help with class analytics, lesson planning, or any general question you have. How can I assist you today?",
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    }
   ]);
   const [input, setInput] = useState('');
   const { loading, generateResponse } = useAI();
@@ -20,34 +33,47 @@ export default function TeacherCoPilot({ students, overview, activeSection }) {
     const text = customPrompt || input;
     if (!text.trim() || loading) return;
 
-    setMessages(prev => [...prev, { role: 'user', content: text }]);
+    const userTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    setMessages(prev => [...prev, { role: 'user', content: text, time: userTime }]);
     setInput('');
 
     // Prepare context-aware prompt
     const contextPrompt = `
+      [SYSTEM]: You are a ChatGPT-style assistant. 
       Context: Teacher Dashboard, Section: ${activeSection}.
       Data: ${students?.length} students, Avg Attendance: ${overview?.averageAttendance}%.
-      User Question: ${text}
+      User Query: ${text}
     `;
 
     await generateResponse(contextPrompt, (chunk) => {
       setMessages(prev => {
         const last = prev[prev.length - 1];
         if (last.role === 'assistant') {
-          return [...prev.slice(0, -1), { role: 'assistant', content: chunk }];
+          return [...prev.slice(0, -1), { 
+            role: 'assistant', 
+            content: chunk, 
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+          }];
         } else {
-          return [...prev, { role: 'assistant', content: chunk }];
+          return [...prev, { 
+            role: 'assistant', 
+            content: chunk, 
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+          }];
         }
       });
     });
   };
 
-  const quickActions = [
-    { label: '📊 Analyze Class', prompt: 'Summarize our current class performance and attendance patterns.' },
-    { label: '⚠️ Find At-Risk', prompt: 'Identify students who are at risk based on their attendance and scores.' },
-    { label: '💡 Teaching Tips', prompt: 'Give me 3 teaching strategies to improve engagement in my class.' },
-    { label: '✉️ Draft Notice', prompt: 'Draft a professional notice for parents about an upcoming parent-teacher meeting.' }
-  ];
+  const startNewChat = () => {
+    setMessages([
+      { 
+        role: 'assistant', 
+        content: "New session started. How can I help you now?",
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
+  };
 
   return (
     <>
@@ -80,40 +106,67 @@ export default function TeacherCoPilot({ students, overview, activeSection }) {
         <span>{isOpen ? 'Close Assistant' : 'AI Co-pilot'}</span>
       </button>
 
-      {/* Co-pilot Drawer */}
+      {/* Co-pilot ChatGPT Interface */}
       {isOpen && (
         <div style={{
           position: 'fixed',
-          bottom: '100px',
+          bottom: '90px',
           right: '24px',
-          width: '380px',
-          height: '550px',
+          width: '450px',
+          height: '650px',
           maxWidth: '90vw',
-          maxHeight: '80vh',
+          maxHeight: '85vh',
           background: 'var(--bg-card)',
           border: '1px solid var(--border-default)',
           borderRadius: 'var(--radius-xl)',
-          boxShadow: '0 12px 48px rgba(0,0,0,0.15)',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
           display: 'flex',
           flexDirection: 'column',
-          zIndex: 999,
+          zIndex: 9998,
           overflow: 'hidden',
           animation: 'drawerSlide 0.4s var(--spring)',
         }}>
           {/* Header */}
           <div style={{
             padding: '16px 20px',
-            background: 'linear-gradient(135deg, var(--primary), var(--violet))',
-            color: 'white',
+            background: 'var(--bg-card)',
+            borderBottom: '1px solid var(--border-default)',
             display: 'flex',
             alignItems: 'center',
-            gap: '12px',
+            justifyContent: 'space-between',
           }}>
-            <div style={{ fontSize: '1.2rem' }}>✨</div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '0.95rem' }}>EduBase Co-pilot</div>
-              <div style={{ fontSize: '0.75rem', opacity: 0.9 }}>Your Professional Teaching Assistant</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ 
+                width: '32px', 
+                height: '32px', 
+                borderRadius: '8px', 
+                background: 'var(--primary)', 
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: '1rem'
+              }}>✨</div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>EduBase AI</div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--success)' }}>● Always Online</div>
+              </div>
             </div>
+            <button 
+              onClick={startNewChat}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid var(--border-default)',
+                background: 'var(--bg-deep)',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+                color: 'var(--text-secondary)',
+              }}
+            >
+              + New Chat
+            </button>
           </div>
 
           {/* Messages Area */}
@@ -121,110 +174,118 @@ export default function TeacherCoPilot({ students, overview, activeSection }) {
             ref={scrollRef}
             style={{
               flex: 1,
-              padding: '20px',
+              padding: '24px 20px',
               overflowY: 'auto',
               display: 'flex',
               flexDirection: 'column',
-              gap: '16px',
+              gap: '24px',
               background: 'var(--bg-deep)',
             }}
           >
             {messages.map((msg, i) => (
               <div key={i} style={{
-                alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                maxWidth: '85%',
-                padding: '12px 16px',
-                borderRadius: 'var(--radius-lg)',
-                fontSize: '0.85rem',
-                lineHeight: 1.5,
-                background: msg.role === 'user' ? 'var(--primary)' : 'var(--bg-card)',
-                color: msg.role === 'user' ? 'white' : 'var(--text-primary)',
-                border: msg.role === 'user' ? 'none' : '1px solid var(--border-default)',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
-                whiteSpace: 'pre-wrap',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                gap: '6px',
               }}>
-                {msg.content}
+                <div style={{
+                  maxWidth: '85%',
+                  padding: '14px 18px',
+                  borderRadius: msg.role === 'user' ? '18px 18px 2px 18px' : '18px 18px 18px 2px',
+                  fontSize: '0.9rem',
+                  lineHeight: 1.6,
+                  background: msg.role === 'user' ? 'var(--primary)' : 'var(--bg-card)',
+                  color: msg.role === 'user' ? 'white' : 'var(--text-primary)',
+                  border: msg.role === 'user' ? 'none' : '1px solid var(--border-default)',
+                  boxShadow: '0 2px 12px rgba(0,0,0,0.03)',
+                }}>
+                  <div dangerouslySetInnerHTML={{ __html: formatMessage(msg.content) }} />
+                </div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', padding: '0 4px' }}>
+                  {msg.time}
+                </div>
               </div>
             ))}
-            {loading && messages[messages.length - 1].role === 'user' && (
-              <div style={{ alignSelf: 'flex-start', padding: '12px 16px', borderRadius: 'var(--radius-lg)', background: 'var(--bg-card)', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                Thinking...
+            {loading && (
+              <div style={{ display: 'flex', gap: '4px', padding: '12px' }}>
+                <div className="dot-pulse" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)', animation: 'pulse 1.2s infinite' }}></div>
+                <div className="dot-pulse" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)', animation: 'pulse 1.2s 0.2s infinite' }}></div>
+                <div className="dot-pulse" style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--primary)', animation: 'pulse 1.2s 0.4s infinite' }}></div>
               </div>
             )}
           </div>
 
-          {/* Quick Actions */}
-          {messages.length < 3 && (
-            <div style={{ padding: '12px 20px', display: 'flex', flexWrap: 'wrap', gap: '8px', borderTop: '1px solid var(--border-default)' }}>
-              {quickActions.map(action => (
-                <button
-                  key={action.label}
-                  onClick={() => handleSend(action.prompt)}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: 'var(--radius-full)',
-                    background: 'rgba(99, 102, 241, 0.1)',
-                    border: '1px solid rgba(99, 102, 241, 0.2)',
-                    color: 'var(--primary)',
-                    fontSize: '0.75rem',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.2)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.1)')}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          )}
-
           {/* Input Area */}
-          <div style={{ padding: '16px 20px', background: 'var(--bg-card)', borderTop: '1px solid var(--border-default)', display: 'flex', gap: '10px' }}>
-            <input
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSend()}
-              placeholder="Ask me anything..."
-              style={{
-                flex: 1,
-                padding: '10px 16px',
-                borderRadius: 'var(--radius-full)',
-                background: 'var(--bg-deep)',
-                border: '1px solid var(--border-default)',
-                color: 'var(--text-primary)',
-                fontSize: '0.85rem',
-                outline: 'none',
-              }}
-            />
-            <button
-              onClick={() => handleSend()}
-              disabled={loading || !input.trim()}
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '50%',
-                background: 'var(--primary)',
-                color: 'white',
-                border: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                opacity: (loading || !input.trim()) ? 0.6 : 1,
-              }}
-            >
-              ➝
-            </button>
+          <div style={{ padding: '20px', background: 'var(--bg-card)', borderTop: '1px solid var(--border-default)' }}>
+            <div style={{ 
+              display: 'flex', 
+              gap: '12px',
+              background: 'var(--bg-deep)',
+              padding: '8px 12px',
+              borderRadius: '12px',
+              border: '1px solid var(--border-default)',
+            }}>
+              <textarea
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
+                placeholder="Ask anything (e.g. Solve x² + 5x + 6 = 0)"
+                rows={1}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-primary)',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  resize: 'none',
+                  padding: '8px 0',
+                  maxHeight: '120px',
+                }}
+              />
+              <button
+                onClick={() => handleSend()}
+                disabled={loading || !input.trim()}
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '10px',
+                  background: 'var(--primary)',
+                  color: 'white',
+                  border: 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  opacity: (loading || !input.trim()) ? 0.4 : 1,
+                  transition: 'all 0.2s',
+                  alignSelf: 'flex-end',
+                }}
+              >
+                ➝
+              </button>
+            </div>
+            <div style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textAlign: 'center', marginTop: '10px' }}>
+              EduBase AI can make mistakes. Consider checking important info.
+            </div>
           </div>
         </div>
       )}
 
       <style>{`
         @keyframes drawerSlide {
-          from { opacity: 0; transform: translateY(20px) scale(0.95); }
+          from { opacity: 0; transform: translateY(30px) scale(0.98); }
           to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 0.3; transform: scale(0.8); }
+          50% { opacity: 1; transform: scale(1.2); }
         }
       `}</style>
     </>
