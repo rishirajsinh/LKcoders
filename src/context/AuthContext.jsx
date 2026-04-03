@@ -2,7 +2,8 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { getInitials } from '../utils/avatarHelpers';
 
-const API_URL = 'http://localhost:5000/api';
+const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const API_URL = isLocal ? 'http://localhost:5000/api' : '/api';
 
 const AuthContext = createContext(null);
 

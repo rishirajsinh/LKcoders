@@ -49,7 +49,8 @@ export default function AdminDashboard() {
     }
   };
 
-  const API_URL = import.meta.env.PROD ? '/api' : 'http://localhost:5000/api';
+  const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+  const API_URL = isLocal ? 'http://localhost:5000/api' : '/api';
 
   const handleAddStudent = async () => {
     if (!newStudent.name || !newStudent.rollNo) return info('Please fill required fields');
