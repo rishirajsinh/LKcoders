@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
+import TeacherCoPilot from '../../components/teacher/TeacherCoPilot';
 
 export default function TeacherDashboard() {
   const { user, getAuthHeaders, API_URL, refreshUser } = useAuth();
@@ -500,6 +501,13 @@ export default function TeacherDashboard() {
           )}
         </div>
       )}
+
+      {/* AI Co-pilot Assistant */}
+      <TeacherCoPilot 
+        students={students} 
+        overview={overview} 
+        activeSection={activeSection} 
+      />
     </div>
   );
 }
