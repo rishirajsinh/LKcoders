@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export default function useAI() {
   const [loading, setLoading] = useState(false);
@@ -11,41 +12,25 @@ export default function useAI() {
     setResponse('');
 
     try {
-      // Try real API first
-      const apiKey = localStorage.getItem('eduflow_api_key');
+      // Priority: 1. Vite Env, 2. localStorage
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('gemini_api_key');
       
-      if (apiKey) {
-        const res = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': apiKey,
-            'anthropic-version': '2023-06-01',
-            'anthropic-dangerous-direct-browser-access': 'true',
-          },
-          body: JSON.stringify({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 1000,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        });
+      if (apiKey && apiKey.trim().length > 20) {
+        const genAI = new GoogleGenerativeAI(apiKey.trim());
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-        if (res.ok) {
-          const data = await res.json();
-          const text = data.content[0].text;
-          
-          // Typewriter effect
-          if (onStream) {
-            for (let i = 0; i < text.length; i++) {
-              await new Promise(r => setTimeout(r, 15));
-              onStream(text.slice(0, i + 1));
-            }
-          }
-          
-          setResponse(text);
-          setLoading(false);
-          return text;
+        const result = await model.generateContentStream(prompt);
+        let fullText = '';
+
+        for await (const chunk of result.stream) {
+          const chunkText = chunk.text();
+          fullText += chunkText;
+          if (onStream) onStream(fullText);
         }
+
+        setResponse(fullText);
+        setLoading(false);
+        return fullText;
       }
 
       // Fallback to simulated AI response
@@ -53,7 +38,7 @@ export default function useAI() {
       
       if (onStream) {
         for (let i = 0; i < simulatedResponse.length; i++) {
-          await new Promise(r => setTimeout(r, 15));
+          await new Promise(r => setTimeout(r, 10));
           onStream(simulatedResponse.slice(0, i + 1));
         }
       }
@@ -62,11 +47,11 @@ export default function useAI() {
       setLoading(false);
       return simulatedResponse;
     } catch (err) {
-      // Fallback 
+      console.error('Gemini Error:', err);
       const fallback = getSimulatedResponse(prompt);
       if (onStream) {
         for (let i = 0; i < fallback.length; i++) {
-          await new Promise(r => setTimeout(r, 15));
+          await new Promise(r => setTimeout(r, 10));
           onStream(fallback.slice(0, i + 1));
         }
       }
@@ -84,7 +69,7 @@ function getSimulatedResponse(prompt) {
 
   // 1. Check for Academic/Teacher Specifics First
   if (lower.includes('feedback') || lower.includes('report')) {
-    return `🤖 AI Analysis Report\n\n✅ Strengths Identified:\n• Strong performance in Science (89/100) and English (84/100)\n• Consistent attendance record showing dedication\n• Improvement trend visible in last 3 assessments\n\n⚠️ Areas Needing Attention:\n• Mathematics (41/100) — Algebra and Trigonometry concepts need reinforcement\n• Problem-solving speed is below class average\n\n💡 Suggestions:\n• Assign Chapter 3-5 revision exercises\n• Pair with Sneha P. (top Math performer) for peer tutoring\n• Schedule weekly 1-on-1 doubt clearing sessions`;
+    return `進 AI Analysis Report\n\n✅ Strengths Identified:\n• Strong performance in Science (89/100) and English (84/100)\n• Consistent attendance record showing dedication\n• Improvement trend visible in last 3 assessments\n\n⚠️ Areas Needing Attention:\n• Mathematics (41/100) — Algebra and Trigonometry concepts need reinforcement\n• Problem-solving speed is below class average\n\n💡 Suggestions:\n• Assign Chapter 3-5 revision exercises\n• Pair with Sneha P. (top Math performer) for peer tutoring\n• Schedule weekly 1-on-1 doubt clearing sessions`;
   }
 
   if (lower.includes('risk') || lower.includes('at-risk')) {
@@ -108,19 +93,23 @@ function getSimulatedResponse(prompt) {
     return `🔬 Scientific Inquiry\n\nI can explain everything from Photosynthesis to Quantum Mechanics. \n\nQuick Fact: Gravity is a fundamental force that attracts any two objects with mass. On Earth, it accelerates objects at approximately 9.8 m/s².\n\nWhat scientific concept should we explore?`;
   }
 
-  if (lower.includes('hello') || lower.includes('hi ') || lower.includes('hey')) {
-    return `👋 Namaste! I am your EduBase AI assistant. \n\nMain aapki class analytics, lesson planning, ya kisi bhi subject ke sawalon mein help kar sakta hoon. Aaj main aapki kaise madad karoon?`;
-  }
-
   if (lower.includes('student') || lower.includes('kitne')) {
     // Dynamically extract student count from prompt context
     const countMatch = prompt.match(/Data: (\d+) students/);
-    const count = countMatch ? parseInt(countMatch[1]) : 2; // Fallback to 2 if not found
+    const count = countMatch ? parseInt(countMatch[1]) : 2; 
     
     const boys = Math.floor(count / 2);
     const girls = count - boys;
     
-    return `📊 Class Overview:\n\nTotal students: **${count}**\n• Boys: ${boys}\n• Girls: ${girls}\n\nAbhi is class mein attendance aur performace stable hai. Aapko kisi specific student ke baare mein janna hai?`;
+    return `📊 Class Overview:\n\nTotal students: **${count}**\n• Boys: ${boys}\n• Girls: ${girls}\n\nAbhi is class mein attendance aur performance stable hai. Aapko kisi specific student (jaise **Rishi** ya **Het**) ke baare mein janna hai?`;
+  }
+
+  if (lower === 'ha' || lower === 'yes' || lower === 'yeah') {
+    return `Theek hai! Class 10-A mein do main students hain:\n\n1. **Rishi**: Inka attendance 95% hai aur Science mein topper hain.\n2. **Het**: Inka attendance thoda kam (70%) hai, inko thodi madad chahiye.\n\nKiske baare mein aur bataun?`;
+  }
+
+  if (lower.includes('hello') || lower.includes('hi ') || lower.includes('hey')) {
+    return `👋 Namaste! I am your EduBase AI assistant powered by Gemini. \n\nMain aapki class analytics, lesson planning, ya kisi bhi subject ke sawalon mein help kar sakta hoon. Aaj main aapki kaise madad karoon?`;
   }
 
   if (lower.includes('kaise') || lower.includes('help') || lower.includes('madad')) {
