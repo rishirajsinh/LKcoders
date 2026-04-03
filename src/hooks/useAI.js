@@ -113,7 +113,14 @@ function getSimulatedResponse(prompt) {
   }
 
   if (lower.includes('student') || lower.includes('kitne')) {
-    return `📊 Class 10-A Overview:\n\nTotal students: **32**\n• Boys: 18\n• Girls: 14\n\nPresent today: **29** (90.6% attendance).\nAapko kisi specific student ka data chahiye?`;
+    // Dynamically extract student count from prompt context
+    const countMatch = prompt.match(/Data: (\d+) students/);
+    const count = countMatch ? parseInt(countMatch[1]) : 2; // Fallback to 2 if not found
+    
+    const boys = Math.floor(count / 2);
+    const girls = count - boys;
+    
+    return `📊 Class Overview:\n\nTotal students: **${count}**\n• Boys: ${boys}\n• Girls: ${girls}\n\nAbhi is class mein attendance aur performace stable hai. Aapko kisi specific student ke baare mein janna hai?`;
   }
 
   if (lower.includes('kaise') || lower.includes('help') || lower.includes('madad')) {
