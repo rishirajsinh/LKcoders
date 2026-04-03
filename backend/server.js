@@ -32,7 +32,7 @@ if (process.env.NODE_ENV === 'production') {
   const rootPath = path.join(__dirname, '../dist');
   app.use(express.static(rootPath));
   
-  app.get('*', (req, res) => {
+  app.use((req, res) => {
     res.sendFile(path.resolve(rootPath, 'index.html'));
   });
 }
