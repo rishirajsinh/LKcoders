@@ -40,6 +40,8 @@ export default function TeacherCoPilot({ students, overview, activeSection }) {
     // Prepare context-aware prompt
     const contextPrompt = `
       [SYSTEM]: You are a ChatGPT-style assistant. 
+      IMPORTANT: Respond in Hinglish (a mix of Hindi and English) as the user prefers it.
+      Mainly use English technical terms, but use Hindi for general explanation and conversation.
       Context: Teacher Dashboard, Section: ${activeSection}.
       Data: ${students?.length} students, Avg Attendance: ${overview?.averageAttendance}%.
       User Query: ${text}

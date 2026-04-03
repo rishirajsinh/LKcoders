@@ -109,9 +109,13 @@ function getSimulatedResponse(prompt) {
   }
 
   if (lower.includes('hello') || lower.includes('hi ') || lower.includes('hey')) {
-    return `👋 Hello! I am your EduBase AI assistant. \n\nI can help you with class analytics, lesson planning, or answering general questions about any subject. How can I assist you today?`;
+    return `👋 Namaste! I am your EduBase AI assistant. \n\nMain aapki class analytics, lesson planning, ya kisi bhi subject ke sawalon mein help kar sakta hoon. Aaj main aapki kaise madad karoon?`;
+  }
+
+  if (lower.includes('kaise') || lower.includes('help') || lower.includes('madad')) {
+    return `🤝 Main aapki har tarah se help kar sakta hoon! \n\nAap mujhse analytics report mang sakte hain, ya phir kisi mushkil topic ko Hinglish mein samajh sakte hain. Bas apna sawal yahan likhiye.`;
   }
 
   // 3. Smart Universal Fallback
-  return `🤖 EduBase AI Assistant\n\nI've analyzed your query: "${prompt}"\n\nAs your comprehensive assistant, I can provide insights on:\n• 📘 Academic Support & Tutoring\n• 📊 Student Data Analysis\n• 🌍 General Knowledge & Research\n• ✉️ Drafting Communications\n\nCould you please provide more details? I'm ready to answer any specific question you have!`;
+  return `🤖 EduBase AI Assistant\n\nMaine aapka query analyze kiya: "${prompt}"\n\nAs your assistant, main ye sab bata sakta hoon:\n• 📘 Academic Support (Hinglish mein explanation)\n• 📊 Student Data Analysis\n• 🌍 General Knowledge\n• ✉️ Drafting Messages\n\nAap apna sawal thoda detail mein puchiye, main turant jawab dunga!`;
 }
