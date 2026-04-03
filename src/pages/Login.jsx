@@ -23,14 +23,14 @@ export default function Login() {
       const roleRoutes = { teacher: '/dashboard/teacher', student: '/dashboard/student', admin: '/dashboard/admin' };
       navigate(roleRoutes[userData.role] || '/dashboard');
     } catch (err) {
-      error(err.response?.data?.message || 'Login failed');
+      error(err.message || 'Login failed');
     }
   };
 
   const roles = [
-    { key: 'teacher', label: '👨‍🏫 Teacher', color: 'var(--primary)' },
-    { key: 'student', label: '🎓 Student', color: 'var(--cyan)' },
-    { key: 'admin', label: '🏫 Admin', color: 'var(--violet)' },
+    { key: 'teacher', label: 'Teacher', color: 'var(--primary)' },
+    { key: 'student', label: 'Student', color: 'var(--cyan)' },
+    { key: 'admin', label: 'Admin', color: 'var(--violet)' },
   ];
 
   return (
@@ -68,22 +68,16 @@ export default function Login() {
           bottom: '20%', right: '20%',
           animation: 'float 5s ease-in-out infinite 1s',
         }} />
-        <div style={{ position: 'relative', textAlign: 'center', zIndex: 1 }}>
-          <div style={{
-            width: 80, height: 80,
-            borderRadius: '20px',
-            background: 'linear-gradient(135deg, var(--primary), var(--violet))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '40px',
-            margin: '0 auto 24px',
-            animation: 'float 3s ease-in-out infinite',
-            boxShadow: '0 0 40px rgba(99,102,241,0.4)',
-          }}>🧠</div>
-          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '2rem', fontWeight: 700, marginBottom: '12px' }}>
-            <span className="gradient-text">EduFlow AI</span>
+        <div style={{ position: 'relative', textAlign: 'center', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <svg viewBox="0 0 100 100" width="80" height="80" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: '24px' }}>
+            <path d="M50 15 L20 75 L38 75 L50 48 L62 75 L80 75 Z" fill="#FFC800" />
+            <polygon points="50,60 42,75 58,75" fill="#FFC800" />
+          </svg>
+          <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '2.5rem', fontWeight: 800, marginBottom: '12px', color: '#fff' }}>
+            Edubase
           </h2>
           <p style={{ color: 'var(--text-secondary)', maxWidth: '300px' }}>
-            AI-powered academic administration that transforms how education works
+            Academic administration that transforms how education works
           </p>
         </div>
       </div>

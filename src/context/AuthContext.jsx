@@ -1,17 +1,10 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
-import { getInitials } from '../utils/avatarHelpers';
 
 const isLocal = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 const API_URL = isLocal ? 'http://localhost:5000/api' : '/api';
 
 const AuthContext = createContext(null);
-
-const defaultUsers = {
-  teacher: { email: 'teacher@eduflow.ai', name: 'Dr. Anita Sharma', role: 'teacher', avatar: 'AS', subject: 'Mathematics' },
-  student: { email: 'student@eduflow.ai', name: 'Aarav Mehta', role: 'student', avatar: 'AM', class: '10A', rollNo: 'STU001', studentId: 1 },
-  admin: { email: 'admin@eduflow.ai', name: 'Prof. Suresh Kumar', role: 'admin', avatar: 'SK' },
-};
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
@@ -31,35 +24,46 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/auth/login`, { email, password });
-      const userData = { ...response.data, avatar: getInitials(response.data.name) || 'UD' };
+      const res = await axios.post(`${API_URL}/auth/login`, { email, password });
+      const userData = {
+        _id: res.data._id,
+        name: res.data.name,
+        email: res.data.email,
+        role: res.data.role,
+        class: res.data.class || '',
+        division: res.data.division || '',
+        assignedClass: res.data.assignedClass || '',
+        assignedDivision: res.data.assignedDivision || '',
+        token: res.data.token,
+      };
       setUser(userData);
       setLoading(false);
       return userData;
-    } catch (error) {
+    } catch (err) {
       setLoading(false);
-      console.error('Login failed', error.response?.data?.message || error.message);
-      throw error;
+      const message = err.response?.data?.message || 'Login failed. Please check your credentials.';
+      throw new Error(message);
     }
   };
 
   const register = async (data) => {
     setLoading(true);
     try {
-      const response = await axios.post(`${API_URL}/auth/register`, {
-        name: data.name,
-        email: data.email,
-        password: data.password,
-        role: data.role || 'student',
-      });
-      const userData = { ...response.data, avatar: getInitials(response.data.name) || 'UD' };
+      const res = await axios.post(`${API_URL}/auth/register`, data);
+      const userData = {
+        _id: res.data._id,
+        name: res.data.name,
+        email: res.data.email,
+        role: res.data.role,
+        token: res.data.token,
+      };
       setUser(userData);
       setLoading(false);
       return userData;
-    } catch (error) {
+    } catch (err) {
       setLoading(false);
-      console.error('Registration failed', error.response?.data?.message || error.message);
-      throw error;
+      const message = err.response?.data?.message || 'Registration failed.';
+      throw new Error(message);
     }
   };
 
@@ -68,8 +72,29 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('eduflow_user');
   };
 
+  // Helper to get auth headers for API requests
+  const getAuthHeaders = () => {
+    return user?.token ? { Authorization: `Bearer ${user.token}` } : {};
+  };
+
+  const refreshUser = async () => {
+    if (!user?.token) return;
+    try {
+      const res = await axios.get(`${API_URL}/profile/me`, {
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      if (res.data.success) {
+        const updatedUser = { ...user, ...res.data.data };
+        setUser(updatedUser);
+        return updatedUser;
+      }
+    } catch (err) {
+      console.error('REFRESH USER ERROR:', err);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, refreshUser, isAuthenticated: !!user, getAuthHeaders, API_URL }}>
       {children}
     </AuthContext.Provider>
   );

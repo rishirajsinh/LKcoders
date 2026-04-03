@@ -14,10 +14,18 @@ app.use(express.json());
 const authRoutes = require('./routes/auth');
 const studentRoutes = require('./routes/students');
 const recordRoutes = require('./routes/records');
+const adminRoutes = require('./routes/admin');
+const teacherRoutes = require('./routes/teacher');
+const studentApiRoutes = require('./routes/student');
+const profileRoutes = require('./routes/profile');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/records', recordRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/teacher', teacherRoutes);
+app.use('/api/student', studentApiRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Database Connection
 mongoose.connect(process.env.MONGO_URI)

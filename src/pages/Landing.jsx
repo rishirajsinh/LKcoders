@@ -2,145 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '../components/layout/Navbar';
 import Toast from '../components/ui/Toast';
-import useCounter from '../hooks/useCounter';
-
-/* ─── Particle Canvas ─── */
-function ParticleCanvas() {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    let animId;
-    let particles = [];
-    let mouse = { x: -1000, y: -1000 };
-
-    const resize = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    };
-    resize();
-    window.addEventListener('resize', resize);
-
-    class Particle {
-      constructor() {
-        this.reset();
-      }
-      reset() {
-        this.x = Math.random() * canvas.width;
-        this.y = Math.random() * canvas.height;
-        this.vx = (Math.random() - 0.5) * 0.5;
-        this.vy = (Math.random() - 0.5) * 0.5;
-        this.radius = Math.random() * 2 + 1;
-        this.opacity = Math.random() * 0.5 + 0.2;
-      }
-      update() {
-        this.x += this.vx;
-        this.y += this.vy;
-        // Mouse repel
-        const dx = this.x - mouse.x;
-        const dy = this.y - mouse.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 120) {
-          this.x += dx * 0.02;
-          this.y += dy * 0.02;
-        }
-        if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
-        if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
-      }
-      draw() {
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(99, 102, 241, ${this.opacity})`;
-        ctx.fill();
-      }
-    }
-
-    for (let i = 0; i < 80; i++) particles.push(new Particle());
-
-    const animate = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      particles.forEach(p => { p.update(); p.draw(); });
-      // Lines
-      for (let i = 0; i < particles.length; i++) {
-        for (let j = i + 1; j < particles.length; j++) {
-          const dx = particles[i].x - particles[j].x;
-          const dy = particles[i].y - particles[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < 120) {
-            ctx.beginPath();
-            ctx.moveTo(particles[i].x, particles[i].y);
-            ctx.lineTo(particles[j].x, particles[j].y);
-            ctx.strokeStyle = `rgba(99, 102, 241, ${0.15 * (1 - dist / 120)})`;
-            ctx.stroke();
-          }
-        }
-      }
-      animId = requestAnimationFrame(animate);
-    };
-
-    const handleMouse = (e) => { mouse.x = e.clientX; mouse.y = e.clientY; };
-    canvas.addEventListener('mousemove', handleMouse);
-    canvas.addEventListener('click', (e) => {
-      particles.forEach(p => {
-        const dx = p.x - e.clientX;
-        const dy = p.y - e.clientY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 200) {
-          p.vx += dx * 0.05;
-          p.vy += dy * 0.05;
-        }
-      });
-    });
-
-    animate();
-    return () => {
-      cancelAnimationFrame(animId);
-      window.removeEventListener('resize', resize);
-    };
-  }, []);
-
-  return <canvas ref={canvasRef} style={{ position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', zIndex: 0, pointerEvents: 'all' }} />;
-}
-
-/* ─── Typewriter ─── */
-function Typewriter({ texts, speed = 80, pause = 2000 }) {
-  const [text, setText] = useState('');
-  const [index, setIndex] = useState(0);
-  const [charIndex, setCharIndex] = useState(0);
-  const [deleting, setDeleting] = useState(false);
-
-  useEffect(() => {
-    const current = texts[index];
-    const timeout = setTimeout(() => {
-      if (!deleting) {
-        setText(current.slice(0, charIndex + 1));
-        if (charIndex + 1 === current.length) {
-          setTimeout(() => setDeleting(true), pause);
-        } else {
-          setCharIndex(c => c + 1);
-        }
-      } else {
-        setText(current.slice(0, charIndex));
-        if (charIndex === 0) {
-          setDeleting(false);
-          setIndex((index + 1) % texts.length);
-        } else {
-          setCharIndex(c => c - 1);
-        }
-      }
-    }, deleting ? speed / 2 : speed);
-    return () => clearTimeout(timeout);
-  }, [charIndex, deleting, index, texts, speed, pause]);
-
-  return (
-    <span>
-      {text}
-      <span style={{ animation: 'blink 1s step-end infinite', color: 'var(--ai-glow)' }}>|</span>
-    </span>
-  );
-}
 
 /* ─── Scroll Reveal Wrapper ─── */
 function ScrollReveal({ children, delay = 0 }) {
@@ -167,28 +28,8 @@ function ScrollReveal({ children, delay = 0 }) {
   );
 }
 
-/* ─── Stat Counter ─── */
-function AnimatedStat({ value, suffix, label }) {
-  const { count, start } = useCounter(value, 2000, false);
-  const ref = useRef(null);
-  const [vis, setVis] = useState(false);
-  useEffect(() => {
-    const obs = new IntersectionObserver(([e]) => { if (e.isIntersecting && !vis) { setVis(true); start(); } }, { threshold: 0.5 });
-    if (ref.current) obs.observe(ref.current);
-    return () => obs.disconnect();
-  }, [vis, start]);
-  return (
-    <div ref={ref} style={{ textAlign: 'center' }}>
-      <div style={{ fontFamily: 'var(--font-heading)', fontSize: '2rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-        {count.toLocaleString()}{suffix}
-      </div>
-      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{label}</div>
-    </div>
-  );
-}
-
 /* ─── Feature Card ─── */
-function FeatureCard({ icon, title, desc, animation, delay = 0 }) {
+function FeatureCard({ icon, title, desc, delay = 0 }) {
   return (
     <div style={{
       background: 'var(--bg-card)',
@@ -196,14 +37,12 @@ function FeatureCard({ icon, title, desc, animation, delay = 0 }) {
       borderRadius: 'var(--radius-lg)',
       padding: '28px',
       backdropFilter: 'blur(20px)',
-      animation: `float 3s ease-in-out infinite ${delay}s`,
       transition: 'all 0.4s var(--spring)',
-      cursor: 'pointer',
     }}
     onMouseEnter={e => {
       e.currentTarget.style.transform = 'translateY(-12px) scale(1.02)';
-      e.currentTarget.style.boxShadow = '0 30px 60px rgba(99,102,241,0.4), 0 0 0 1px rgba(99,102,241,0.2)';
-      e.currentTarget.style.borderColor = 'rgba(99,102,241,0.4)';
+      e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
+      e.currentTarget.style.borderColor = 'rgba(255,200,0,0.4)';
     }}
     onMouseLeave={e => {
       e.currentTarget.style.transform = '';
@@ -211,90 +50,23 @@ function FeatureCard({ icon, title, desc, animation, delay = 0 }) {
       e.currentTarget.style.borderColor = 'var(--border-default)';
     }}
     >
-      <div style={{ fontSize: '2.5rem', marginBottom: '16px' }}>{icon}</div>
-      <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', fontWeight: 600, marginBottom: '8px' }}>{title}</h3>
+      <div style={{ width: 48, height: 48, marginBottom: '16px', color: 'var(--text-primary)' }}>{icon}</div>
+      <h3 style={{ fontFamily: 'system-ui, sans-serif', fontSize: '1.1rem', fontWeight: 600, marginBottom: '8px' }}>{title}</h3>
       <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>{desc}</p>
-      {animation && <div style={{ marginTop: '16px' }}>{animation}</div>}
     </div>
   );
 }
-
-/* ─── Mini Animations ─── */
-function MiniProgressBar({ value, color = 'var(--primary)', delay = 0 }) {
-  const [w, setW] = useState(0);
-  useEffect(() => { setTimeout(() => setW(value), 300 + delay); }, [value, delay]);
-  return (
-    <div style={{ height: 6, background: 'var(--bg-deep)', borderRadius: 3, overflow: 'hidden' }}>
-      <div style={{ height: '100%', width: `${w}%`, background: color, borderRadius: 3, transition: 'width 1.5s var(--smooth)' }} />
-    </div>
-  );
-}
-
-function MiniHeatmap() {
-  const cells = Array.from({ length: 20 }, () => Math.random() > 0.3);
-  return (
-    <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-      {cells.map((v, i) => (
-        <div key={i} style={{ width: 12, height: 12, borderRadius: 2, background: v ? '#10b981' : '#f43f5e', opacity: 0.7 }} />
-      ))}
-    </div>
-  );
-}
-
-function MiniRiskMeter() {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'linear-gradient(90deg, #10b981, #f59e0b, #f43f5e)' }} />
-      <div style={{
-        width: 12, height: 12, borderRadius: '50%', background: '#f59e0b',
-        boxShadow: '0 0 10px rgba(245,158,11,0.5)', animation: 'pulse 1.5s ease-in-out infinite',
-      }} />
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════
-   MAIN LANDING PAGE COMPONENT
-   ═══════════════════════════════════════ */
 
 export default function Landing() {
-  const [activeTab, setActiveTab] = useState('attendance');
   const [pricingMonthly, setPricingMonthly] = useState(true);
-  const [testimonialIndex, setTestimonialIndex] = useState(0);
-
-  const testimonials = [
-    { name: 'Dr. Priya Menon', role: 'Principal, DPS Bangalore', text: 'EduFlow AI reduced our admin workload by 70%. The AI insights are genuinely transformative — we caught 15 at-risk students before mid-terms.', avatar: 'PM' },
-    { name: 'Rajesh Kumar', role: 'Math Teacher, KV Delhi', text: 'The AI teaching suggestions are spot-on. It identified that my Monday tests were scoring 23% lower. Moving them to Wednesday changed everything.', avatar: 'RK' },
-    { name: 'Aarav Sharma', role: 'Student, Class 10', text: 'The AI study plan helped me boost my Math score from 42 to 78 in one term. The personalized schedule was a game-changer.', avatar: 'AS' },
-  ];
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setTestimonialIndex(i => (i + 1) % testimonials.length);
-    }, 5000);
-    return () => clearInterval(timer);
-  }, []);
 
   const features = [
-    { icon: '🧠', title: 'AI Report Generator', desc: 'Generates full PDF-ready report cards in 3 seconds with personalized teacher comments.', animation: <MiniProgressBar value={95} color="var(--primary)" /> },
-    { icon: '⚠️', title: 'Student Risk Detector', desc: 'Identifies at-risk students 3 weeks before failure with 91% confidence.', animation: <MiniRiskMeter /> },
-    { icon: '📈', title: 'Performance Predictor', desc: 'Predicts end-term scores with 94% accuracy using historical trend analysis.', animation: <MiniProgressBar value={94} color="var(--cyan)" delay={200} /> },
-    { icon: '💡', title: 'Smart Teaching Suggestions', desc: 'AI recommends lesson plans based on class weakness patterns.', animation: <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{['Algebra Revision', 'Lab Session', 'Quiz'].map(c => <span key={c} style={{ padding: '4px 10px', borderRadius: 12, background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', fontSize: '0.7rem', color: 'var(--primary-light)' }}>{c}</span>)}</div> },
-    { icon: '🎯', title: 'Auto Attendance Analyzer', desc: 'Detects patterns like "Mondays see 40% drop" and suggests interventions.', animation: <MiniHeatmap /> },
-    { icon: '📊', title: 'Sentiment Analysis', desc: 'Analyzes student engagement from participation data and flags disengagement.', animation: <MiniProgressBar value={72} color="var(--emerald)" delay={400} /> },
-  ];
-
-  const tabContent = {
-    attendance: { title: 'Smart Attendance', desc: 'Toggle-based marking with AI pattern detection', visual: '📋' },
-    marks: { title: 'Marks Management', desc: 'Subject-wise entry with auto-grading and AI feedback', visual: '✏️' },
-    reports: { title: 'AI Reports', desc: 'One-click PDF report generation with personalized comments', visual: '📄' },
-    risk: { title: 'Risk Detection', desc: 'Real-time risk scoring with intervention recommendations', visual: '⚠️' },
-  };
-
-  const roles = [
-    { icon: '👨‍🏫', title: 'Teacher', desc: 'Manage attendance, enter marks, get AI-powered insights, and generate reports effortlessly.', features: ['AI Feedback', 'Risk Detection', 'Smart Reports', 'Attendance Analysis'], color: 'var(--primary)' },
-    { icon: '🎓', title: 'Student', desc: 'Track your performance, get personalized study plans, and compete with gamification.', features: ['AI Study Plans', 'Performance Tracking', 'Achievements', 'Report Cards'], color: 'var(--cyan)' },
-    { icon: '🏫', title: 'Admin', desc: 'School-wide analytics, teacher management, and AI-driven strategic insights.', features: ['School Analytics', 'Teacher Mgmt', 'AI Insights', 'Announcements'], color: 'var(--violet)' },
+    { icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>, title: 'AI Report Generator', desc: 'Generates full PDF-ready report cards in 3 seconds with personalized teacher comments.' },
+    { icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>, title: 'Student Risk Detector', desc: 'Identifies at-risk students 3 weeks before failure with 91% confidence.' },
+    { icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>, title: 'Performance Predictor', desc: 'Predicts end-term scores with 94% accuracy using historical trend analysis.' },
+    { icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>, title: 'Smart Teaching Suggestions', desc: 'AI recommends lesson plans based on class weakness patterns.' },
+    { icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>, title: 'Auto Attendance Analyzer', desc: 'Detects patterns like "Mondays see 40% drop" and suggests interventions.' },
+    { icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>, title: 'Sentiment Analysis', desc: 'Analyzes student engagement from participation data and flags disengagement.' },
   ];
 
   const pricingPlans = [
@@ -305,7 +77,6 @@ export default function Landing() {
 
   return (
     <div style={{ position: 'relative', minHeight: '100vh', background: 'var(--bg-deep)' }}>
-      <ParticleCanvas />
       <Navbar />
       <Toast />
 
@@ -317,91 +88,118 @@ export default function Landing() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '120px 32px 80px',
-        textAlign: 'center',
+        padding: '120px 5% 60px',
+        background: '#f1f5f9', // light gray off-white base
+        overflow: 'hidden',
       }}>
-        <div style={{ maxWidth: '900px' }}>
-          {/* Badge */}
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '8px 20px',
-            borderRadius: 'var(--radius-full)',
-            background: 'rgba(167, 139, 250, 0.1)',
-            border: '1px solid rgba(167, 139, 250, 0.3)',
-            fontSize: '0.85rem',
-            color: 'var(--ai-glow)',
-            marginBottom: '32px',
-            animation: 'float 3s ease-in-out infinite',
-          }}>
-            ✦ Powered by Claude AI
+        {/* Dark asterisk top approx middle */}
+        <svg style={{ position: 'absolute', top: '25%', left: '48%', width: '30px', height: '30px', color: '#111827' }} viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2l2.4 7.6H22l-6.2 4.5 2.4 7.6-6.2-4.5-6.2 4.5 2.4-7.6L2 9.6h7.6z"/>
+        </svg>
+        {/* Small bottom left star */}
+        <svg style={{ position: 'absolute', bottom: '20%', left: '26%', width: '25px', height: '25px', color: '#111827' }} viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2l2.4 7.6H22l-6.2 4.5 2.4 7.6-6.2-4.5-6.2 4.5 2.4-7.6L2 9.6h7.6z"/>
+        </svg>
+        {/* Dark green leaf/plant bottom left */}
+        <svg style={{ position: 'absolute', bottom: '5%', left: '15%', width: '150px', height: '150px', color: '#0f5132' }} viewBox="0 0 100 100" fill="currentColor">
+          <path d="M30 80 Q50 30 70 50 Q60 80 30 80 Z" />
+          <path d="M30 80 Q20 40 40 20 Q55 50 30 80 Z" />
+          <path d="M30 80 Q60 70 85 90 Q60 100 30 80 Z" />
+        </svg>
+        {/* Palette icon bottom left */}
+        <svg style={{ position: 'absolute', bottom: '8%', left: '5%', width: '80px', height: '80px' }} viewBox="0 0 100 100">
+           <path d="M10 50 A40 40 0 1 1 90 50 A40 40 0 0 1 10 50 Z" fill="#ffffff" />
+           <circle cx="30" cy="35" r="8" fill="#e11d48"/>
+           <circle cx="50" cy="20" r="8" fill="#3b82f6"/>
+           <circle cx="70" cy="35" r="8" fill="#10b981"/>
+           <circle cx="65" cy="55" r="8" fill="#f59e0b"/>
+           <circle cx="30" cy="60" r="10" fill="#e5e7eb"/>
+        </svg>
+        {/* Dark green blob top left */}
+        <svg style={{ position: 'absolute', top: 0, left: 0, width: '350px', height: '350px', transform: 'translate(-30%, -30%)' }} viewBox="0 0 100 100" preserveAspectRatio="none">
+          <path d="M0 0 L100 0 A100 100 0 0 1 0 100 Z" fill="#0f5132" />
+        </svg>
+        {/* Decorative dashed lines left */}
+        <svg style={{ position: 'absolute', top: '10%', left: '20%', width: '150px', height: '150px' }} viewBox="0 0 100 100">
+           <path d="M10 50 Q 30 10 90 50" fill="none" stroke="#111827" strokeWidth="2" strokeDasharray="5,5" opacity="0.3"/>
+        </svg>
+
+        <div style={{
+          display: 'flex',
+          flexDirection: 'row',
+          alignItems: 'center',
+          maxWidth: '1200px',
+          width: '100%',
+          gap: '40px',
+        }} className="hero-container">
+          {/* Left Text */}
+          <div style={{ flex: 1, zIndex: 2, paddingRight: '20px' }}>
+             <h1 style={{ fontFamily: 'system-ui, -apple-system, sans-serif', fontSize: 'clamp(3.5rem, 6vw, 5.5rem)', fontWeight: 900, lineHeight: 1.1, color: '#111827', textTransform: 'uppercase', marginBottom: '24px' }}>
+               The Path To<br/>Excellence
+             </h1>
+             <p style={{ fontSize: '1.1rem', color: '#6b7280', marginBottom: '32px', maxWidth: '500px', lineHeight: 1.6 }}>
+               Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.
+             </p>
+             <Link to="/register" style={{
+               display: 'inline-block', padding: '14px 40px', background: '#FFC800', color: '#111827', borderRadius: '40px', fontWeight: 800, textDecoration: 'none', fontSize: '1.05rem', boxShadow: '0 4px 14px rgba(255, 200, 0, 0.4)'
+             }}>
+               REGISTER
+             </Link>
           </div>
 
-          {/* H1 */}
-          <h1 style={{
-            fontFamily: 'var(--font-heading)',
-            fontSize: 'clamp(2.5rem, 6vw, 4rem)',
-            fontWeight: 700,
-            lineHeight: 1.1,
-            marginBottom: '24px',
-          }}>
-            <span className="gradient-text">AI-Powered Academic</span>
-            <br />
-            <span style={{ color: 'var(--text-primary)' }}>Automation That </span>
-            <span className="gradient-text-cyan">Defies Gravity</span>
-          </h1>
+          {/* Right Imagery */}
+          <div style={{ flex: 1, position: 'relative', height: '550px', width: '100%', display: 'flex', justifyContent: 'center', alignItems: 'flex-end', zIndex: 1 }}>
+            {/* Yellow Blob */}
+            <div style={{
+              position: 'absolute', right: '-15%', top: '-10%', width: '130%', height: '120%',
+              background: '#FFC800', borderRadius: '40% 60% 70% 30% / 40% 50% 60% 50%', zIndex: -1
+            }} />
+            {/* White/Gray dashed blobs */}
+            <svg style={{ position: 'absolute', bottom: '30%', right: '-5%', width: '150px', height: '150px' }} viewBox="0 0 100 100">
+               <path d="M10 50 A40 40 0 1 1 90 50 A40 40 0 0 1 10 50 Z" fill="none" stroke="#111827" strokeWidth="2" strokeDasharray="5,5" opacity="0.3"/>
+            </svg>
 
-          {/* Typewriter subtitle */}
-          <div style={{
-            fontSize: 'clamp(1rem, 2.5vw, 1.3rem)',
-            color: 'var(--text-secondary)',
-            marginBottom: '40px',
-            height: '40px',
-          }}>
-            <Typewriter
-              texts={['Automate Attendance Tracking', 'Predict Student Risk with AI', 'Generate Smart Reports Instantly', 'Reduce 80% Admin Workload']}
-              speed={70}
-              pause={2500}
-            />
-          </div>
+            {/* Math Text */}
+            <div style={{ position: 'absolute', top: '10%', right: '40%', fontFamily: 'serif', fontSize: '1.4rem', color: '#fff', transform: 'rotate(-5deg)' }}>
+              (x+y)² = x² + 2xy + y²
+            </div>
+            <div style={{ position: 'absolute', top: '25%', right: '5%', fontFamily: 'serif', fontSize: '1.4rem', color: '#fff', transform: 'rotate(10deg)' }}>
+              a² + b² = c²
+            </div>
 
-          {/* CTAs */}
-          <div style={{ display: 'flex', gap: '16px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '48px' }}>
-            <Link to="/register" className="btn-gradient" style={{ padding: '14px 36px', fontSize: '1.05rem' }}>
-              <span>Get Started Free →</span>
-            </Link>
-            <button className="btn-outline" style={{ padding: '14px 36px', fontSize: '1.05rem' }}>
-              <span>Watch Demo ▶</span>
-            </button>
-          </div>
+            {/* Rocket */}
+            <svg style={{ position: 'absolute', bottom: '30%', left: '-5%', width: '100px', height: '100px', transform: 'rotate(45deg)' }} viewBox="0 0 100 100">
+              <path d="M40 80 L30 100 L50 90 L70 100 L60 80 Z" fill="#ef4444"/>
+              <path d="M20 60 Q50 10 80 60 Q50 100 20 60 Z" fill="#3b82f6"/>
+              <path d="M50 30 A10 10 0 1 1 50.1 30 Z" fill="#fff" stroke="#111827" strokeWidth="4"/>
+              <path d="M10 80 L30 65 L40 85 Z" fill="#f59e0b" />
+              <path d="M90 80 L70 65 L60 85 Z" fill="#f59e0b" />
+            </svg>
 
-          {/* Stats Ticker */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'center',
-            gap: '48px',
-            flexWrap: 'wrap',
-            padding: '24px',
-            borderRadius: 'var(--radius-xl)',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-default)',
-            backdropFilter: 'blur(20px)',
-          }}>
-            <AnimatedStat value={10000} suffix="+" label="Teachers" />
-            <AnimatedStat value={500000} suffix="+" label="Students" />
-            <AnimatedStat value={98} suffix="%" label="Accuracy" />
-          </div>
-
-          {/* Scroll indicator */}
-          <div style={{
-            marginTop: '48px',
-            animation: 'bounce 2s ease-in-out infinite',
-          }}>
-            <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '8px' }}>Scroll to explore</div>
-            <div style={{ fontSize: '1.2rem' }}>↓</div>
+            {/* Students Container */}
+            <div style={{ position: 'relative', width: '100%', height: '100%', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+              {/* Fake grayscale avatars / images as block divs */}
+              <div style={{
+                position: 'absolute', bottom: 0, left: '5%', width: '240px', height: '400px',
+                background: 'url(https://images.unsplash.com/photo-1522202176988-66273c2fd55f?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80) center/cover',
+                borderRadius: '120px 120px 0 0', filter: 'grayscale(100%) contrast(1.1)', zIndex: 1
+              }} />
+              <div style={{
+                position: 'absolute', bottom: 0, right: '5%', width: '280px', height: '450px',
+                background: 'url(https://images.unsplash.com/photo-1531427186611-ecfd6d936c79?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80) 60% 40%/cover',
+                borderRadius: '140px 140px 0 0', filter: 'grayscale(100%) contrast(1.1)', zIndex: 2
+              }} />
+            </div>
           </div>
         </div>
+
+        <style>{`
+          @media (max-width: 900px) {
+            .hero-container { flex-direction: column !important; text-align: center; margin-top: 60px; }
+            .hero-container > div:first-child { align-items: center; padding-right: 0px !important; }
+            .hero-container h1 { font-size: clamp(2.5rem, 8vw, 3.5rem) !important; }
+          }
+        `}</style>
       </section>
 
       {/* ═══ AI FEATURES SECTION ═══ */}
@@ -419,12 +217,12 @@ export default function Landing() {
               background: 'rgba(99, 102, 241, 0.1)',
               border: '1px solid rgba(99, 102, 241, 0.3)',
               fontSize: '0.8rem', color: 'var(--primary-light)', marginBottom: '16px',
-            }}>🧠 AI Features</div>
+            }}>AI Features</div>
             <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: 'clamp(1.8rem, 4vw, 2.5rem)', fontWeight: 700, marginBottom: '16px' }}>
-              The <span className="gradient-text">AI Brain</span> Behind EduFlow
+              The <span className="gradient-text">AI Brain</span> Behind Edubase
             </h2>
             <p style={{ color: 'var(--text-secondary)', maxWidth: '600px', margin: '0 auto' }}>
-              Powered by state-of-the-art language models, EduFlow transforms raw academic data into actionable intelligence.
+              Powered by state-of-the-art language models, Edubase transforms raw academic data into actionable intelligence.
             </p>
           </div>
         </ScrollReveal>
@@ -436,58 +234,6 @@ export default function Landing() {
             </ScrollReveal>
           ))}
         </div>
-      </section>
-
-      {/* ═══ INTERACTIVE FEATURE SHOWCASE ═══ */}
-      <section style={{
-        position: 'relative', zIndex: 1,
-        padding: '80px 32px',
-        maxWidth: '900px',
-        margin: '0 auto',
-      }}>
-        <ScrollReveal>
-          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-            <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '2rem', fontWeight: 700 }}>
-              See It In <span className="gradient-text">Action</span>
-            </h2>
-          </div>
-
-          {/* Tabs */}
-          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '24px', flexWrap: 'wrap' }}>
-            {Object.keys(tabContent).map(tab => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                style={{
-                  padding: '10px 20px',
-                  borderRadius: 'var(--radius-full)',
-                  background: activeTab === tab ? 'linear-gradient(135deg, var(--primary), var(--violet))' : 'var(--bg-card)',
-                  border: activeTab === tab ? 'none' : '1px solid var(--border-default)',
-                  color: activeTab === tab ? 'white' : 'var(--text-secondary)',
-                  fontSize: '0.85rem', fontWeight: 600,
-                  transition: 'all 0.3s var(--spring)',
-                  textTransform: 'capitalize',
-                }}
-              >{tab}</button>
-            ))}
-          </div>
-
-          {/* Content */}
-          <div style={{
-            padding: '40px',
-            borderRadius: 'var(--radius-xl)',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-default)',
-            textAlign: 'center',
-            animation: 'fadeIn 0.4s ease',
-          }} key={activeTab}>
-            <div style={{ fontSize: '4rem', marginBottom: '16px' }}>{tabContent[activeTab].visual}</div>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', marginBottom: '8px' }}>
-              {tabContent[activeTab].title}
-            </h3>
-            <p style={{ color: 'var(--text-secondary)' }}>{tabContent[activeTab].desc}</p>
-          </div>
-        </ScrollReveal>
       </section>
 
       {/* ═══ HOW IT WORKS ═══ */}
@@ -506,10 +252,10 @@ export default function Landing() {
         </ScrollReveal>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '24px' }}>
           {[
-            { step: '01', icon: '👥', title: 'Add Students', desc: 'Import or add student data to your class' },
-            { step: '02', icon: '📋', title: 'Mark Attendance', desc: 'Quick toggle-based daily attendance' },
-            { step: '03', icon: '🧠', title: 'AI Analyzes', desc: 'AI processes data for patterns & risks' },
-            { step: '04', icon: '📊', title: 'Get Insights', desc: 'Actionable insights and smart reports' },
+            { step: '01', icon: <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>, title: 'Add Students', desc: 'Import or add student data to your class' },
+            { step: '02', icon: <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>, title: 'Mark Attendance', desc: 'Quick toggle-based daily attendance' },
+            { step: '03', icon: <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>, title: 'AI Analyzes', desc: 'AI processes data for patterns & risks' },
+            { step: '04', icon: <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>, title: 'Get Insights', desc: 'Actionable insights and smart reports' },
           ].map((item, i) => (
             <ScrollReveal key={i} delay={i * 0.15}>
               <div style={{
@@ -518,7 +264,6 @@ export default function Landing() {
                 borderRadius: 'var(--radius-lg)',
                 background: 'var(--bg-card)',
                 border: '1px solid var(--border-default)',
-                animation: `float 3s ease-in-out infinite ${i * 0.4}s`,
                 transition: 'all 0.4s var(--spring)',
               }}
               onMouseEnter={e => {
@@ -531,115 +276,13 @@ export default function Landing() {
               }}
               >
                 <div style={{ fontSize: '0.75rem', color: 'var(--primary-light)', fontWeight: 700, marginBottom: '12px', fontFamily: 'var(--font-heading)' }}>STEP {item.step}</div>
-                <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>{item.icon}</div>
+                <div style={{ marginBottom: '16px', color: 'var(--text-primary)', display: 'flex', justifyContent: 'center' }}>{item.icon}</div>
                 <h4 style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, marginBottom: '8px' }}>{item.title}</h4>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>{item.desc}</p>
               </div>
             </ScrollReveal>
           ))}
         </div>
-      </section>
-
-      {/* ═══ ROLES SECTION ═══ */}
-      <section id="roles" style={{
-        position: 'relative', zIndex: 1,
-        padding: '100px 32px',
-        maxWidth: '1100px',
-        margin: '0 auto',
-      }}>
-        <ScrollReveal>
-          <div style={{ textAlign: 'center', marginBottom: '60px' }}>
-            <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '2rem', fontWeight: 700 }}>
-              Built for <span className="gradient-text">Every Role</span>
-            </h2>
-          </div>
-        </ScrollReveal>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px' }}>
-          {roles.map((role, i) => (
-            <ScrollReveal key={i} delay={i * 0.15}>
-              <div style={{
-                padding: '32px',
-                borderRadius: 'var(--radius-xl)',
-                background: 'var(--bg-card)',
-                border: `1px solid ${role.color}20`,
-                animation: `float 3s ease-in-out infinite ${i * 0.4}s`,
-                transition: 'all 0.4s var(--spring)',
-                cursor: 'pointer',
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.transform = 'translateY(-12px) scale(1.02)';
-                e.currentTarget.style.boxShadow = `0 30px 60px ${role.color}30`;
-                e.currentTarget.style.borderColor = `${role.color}50`;
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.transform = '';
-                e.currentTarget.style.boxShadow = '';
-                e.currentTarget.style.borderColor = `${role.color}20`;
-              }}
-              >
-                <div style={{ fontSize: '3rem', marginBottom: '16px' }}>{role.icon}</div>
-                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.3rem', fontWeight: 600, marginBottom: '8px', color: role.color }}>{role.title}</h3>
-                <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '20px' }}>{role.desc}</p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  {role.features.map(f => (
-                    <div key={f} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <span style={{ color: role.color }}>✦</span> {f}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </ScrollReveal>
-          ))}
-        </div>
-      </section>
-
-      {/* ═══ TESTIMONIALS ═══ */}
-      <section style={{
-        position: 'relative', zIndex: 1,
-        padding: '100px 32px',
-        maxWidth: '800px',
-        margin: '0 auto',
-      }}>
-        <ScrollReveal>
-          <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-            <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '2rem', fontWeight: 700 }}>
-              What People <span className="gradient-text">Say</span>
-            </h2>
-          </div>
-          <div style={{
-            padding: '40px',
-            borderRadius: 'var(--radius-xl)',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-default)',
-            textAlign: 'center',
-            animation: 'float 3s ease-in-out infinite',
-            transition: 'all 0.5s ease',
-          }} key={testimonialIndex}>
-            <div style={{
-              width: 56, height: 56, borderRadius: '50%',
-              background: 'linear-gradient(135deg, var(--primary), var(--violet))',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontWeight: 700, fontSize: '1rem',
-              margin: '0 auto 20px',
-            }}>{testimonials[testimonialIndex].avatar}</div>
-            <p style={{ fontSize: '1.05rem', color: 'var(--text-secondary)', fontStyle: 'italic', marginBottom: '20px', lineHeight: 1.7 }}>
-              "{testimonials[testimonialIndex].text}"
-            </p>
-            <div style={{ fontWeight: 600 }}>{testimonials[testimonialIndex].name}</div>
-            <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{testimonials[testimonialIndex].role}</div>
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '20px' }}>
-              {testimonials.map((_, i) => (
-                <button key={i} onClick={() => setTestimonialIndex(i)} style={{
-                  width: i === testimonialIndex ? 24 : 8, height: 8,
-                  borderRadius: 4,
-                  background: i === testimonialIndex ? 'var(--primary)' : 'var(--border-default)',
-                  transition: 'all 0.3s ease',
-                  border: 'none',
-                }} />
-              ))}
-            </div>
-          </div>
-        </ScrollReveal>
       </section>
 
       {/* ═══ PRICING ═══ */}
@@ -688,14 +331,13 @@ export default function Landing() {
                 borderRadius: 'var(--radius-xl)',
                 background: plan.highlighted ? 'rgba(99, 102, 241, 0.08)' : 'var(--bg-card)',
                 border: `1px solid ${plan.highlighted ? 'rgba(99, 102, 241, 0.4)' : 'var(--border-default)'}`,
-                animation: plan.highlighted ? 'aiGlow 3s ease-in-out infinite' : `float 3s ease-in-out infinite ${i * 0.3}s`,
                 transition: 'all 0.4s var(--spring)',
                 position: 'relative',
                 ...(plan.highlighted && { transform: 'scale(1.05)' }),
               }}
               onMouseEnter={e => {
                 e.currentTarget.style.transform = `translateY(-8px) ${plan.highlighted ? 'scale(1.07)' : 'scale(1.02)'}`;
-                e.currentTarget.style.boxShadow = 'var(--shadow-lift)';
+                e.currentTarget.style.boxShadow = '0 10px 30px rgba(0,0,0,0.1)';
               }}
               onMouseLeave={e => {
                 e.currentTarget.style.transform = plan.highlighted ? 'scale(1.05)' : '';
@@ -717,14 +359,16 @@ export default function Landing() {
                 </div>
                 <Link to="/register" className={plan.highlighted ? 'btn-gradient' : 'btn-outline'} style={{
                   display: 'block', textAlign: 'center', marginTop: '20px', marginBottom: '24px',
-                  padding: '12px', width: '100%', borderRadius: 'var(--radius-md)',
+                  padding: '12px', width: '100%', borderRadius: 'var(--radius-md)', textDecoration: 'none'
                 }}>
                   <span>Get Started</span>
                 </Link>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   {plan.features.map(f => (
                     <div key={f} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
-                      <span style={{ color: 'var(--emerald)' }}>✓</span> {f}
+                      <span style={{ color: 'var(--emerald)' }}>
+                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>
+                      </span> {f}
                     </div>
                   ))}
                 </div>
@@ -753,7 +397,7 @@ export default function Landing() {
         <p style={{ color: 'var(--text-secondary)', marginBottom: '32px', maxWidth: '500px', margin: '0 auto 32px' }}>
           Join 10,000+ educators already using AI to transform their classrooms.
         </p>
-        <Link to="/register" className="btn-gradient" style={{ padding: '16px 48px', fontSize: '1.1rem' }}>
+        <Link to="/register" className="btn-gradient" style={{ padding: '16px 48px', fontSize: '1.1rem', textDecoration: 'none', borderRadius: '40px' }}>
           <span>Get Started Free →</span>
         </Link>
       </section>
@@ -770,16 +414,16 @@ export default function Landing() {
           {/* Brand */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-              <div style={{
-                width: 36, height: 36, borderRadius: '10px',
-                background: 'linear-gradient(135deg, var(--primary), var(--violet))',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '18px',
-              }}>🧠</div>
-              <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.1rem' }}>EduFlow AI</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg viewBox="0 0 100 100" width="32" height="32" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M50 15 L20 75 L38 75 L50 48 L62 75 L80 75 Z" fill="#FFC800" />
+                  <polygon points="50,60 42,75 58,75" fill="#FFC800" />
+                </svg>
+              </div>
+              <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, fontSize: '1.1rem' }}>Edubase</span>
             </div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '250px' }}>
-              AI-powered academic administration that defies gravity.
+              Academic administration that transforms how education works.
             </p>
           </div>
           {/* Links */}
@@ -803,7 +447,7 @@ export default function Landing() {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px',
           paddingTop: '24px', borderTop: '1px solid var(--border-default)',
         }}>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>© 2026 EduFlow AI. All rights reserved.</div>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>© 2026 Edubase. All rights reserved.</div>
           <div style={{
             display: 'inline-flex', padding: '6px 14px', borderRadius: 'var(--radius-full)',
             background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)',

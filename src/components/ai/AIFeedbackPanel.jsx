@@ -8,7 +8,7 @@ export default function AIFeedbackPanel({ student, marks }) {
 
   const handleGenerate = async () => {
     const marksStr = Object.entries(marks).map(([s, v]) => `${s}: ${v}/100`).join(', ');
-    const prompt = `You are an academic AI assistant for EduFlow. Analyze this student data and provide personalized feedback:\n\nStudent: ${student.name} (${student.rollNo})\nClass: ${student.class}\nSubject Scores: ${marksStr}\n\nProvide: strengths, areas needing improvement, predicted improvement, and specific suggestions. Use emojis.`;
+    const prompt = `You are an academic AI assistant for Edubase. Analyze this student data and provide personalized feedback:\n\nStudent: ${student.name} (${student.rollNo})\nClass: ${student.class}\nSubject Scores: ${marksStr}\n\nProvide: strengths, areas needing improvement, predicted improvement, and specific suggestions.`;
     
     await generateResponse(prompt, (partial) => setFeedback(partial));
   };
@@ -28,7 +28,7 @@ export default function AIFeedbackPanel({ student, marks }) {
         background: 'rgba(167, 139, 250, 0.05)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span>🤖</span>
+          <span><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span>
           <span style={{ fontFamily: 'var(--font-heading)', fontSize: '0.85rem', fontWeight: 600, color: 'var(--ai-glow)' }}>
             AI Feedback for {student.name}
           </span>
@@ -67,7 +67,7 @@ export default function AIFeedbackPanel({ student, marks }) {
           </>
         ) : (
           <div style={{ textAlign: 'center', opacity: 0.4, padding: '20px' }}>
-            <span style={{ fontSize: '2rem' }}>🧠</span>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
             <p style={{ marginTop: 8 }}>Click generate to get AI-powered feedback</p>
           </div>
         )}

@@ -1,26 +1,16 @@
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
-import students from '../../data/students';
-import marks, { getLatestMarks, getAverageMarks, getClassAverage } from '../../data/marks';
-import { getAttendanceRate, getTodayAttendance, getAttendanceStreak, getMonthlyHeatmap } from '../../data/attendance';
-import aiInsights from '../../data/aiInsights';
-import StatCard from '../../components/ui/StatCard';
-import AIInsightBox from '../../components/ui/AIInsightBox';
-import GradientButton from '../../components/ui/GradientButton';
-import PerformanceChart from '../../components/charts/PerformanceChart';
-import AttendanceChart from '../../components/charts/AttendanceChart';
-import HeatmapCalendar from '../../components/charts/HeatmapCalendar';
-import RiskDetector from '../../components/ai/RiskDetector';
-import AIFeedbackPanel from '../../components/ai/AIFeedbackPanel';
-import useAI from '../../hooks/useAI';
+import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 export default function TeacherDashboard() {
+  const { user, getAuthHeaders, API_URL, refreshUser } = useAuth();
+  const { success, info } = useNotification();
   const location = useLocation();
   const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState(() => location.hash.replace('#', '') || 'overview');
-  
+
   useEffect(() => {
     setActiveSection(location.hash.replace('#', '') || 'overview');
   }, [location.hash]);
@@ -30,259 +20,305 @@ export default function TeacherDashboard() {
     navigate(`#${tab}`, { replace: true });
   };
 
-  const [todayAttendance, setTodayAttendance] = useState(getTodayAttendance());
-  const [selectedSubject, setSelectedSubject] = useState('Mathematics');
-  const [selectedStudent, setSelectedStudent] = useState(null);
-  const [aiPanelVisible, setAiPanelVisible] = useState(false);
-  const [dismissedInsights, setDismissedInsights] = useState([]);
-  const { generateResponse, loading: aiLoading } = useAI();
-  const { success, info } = useNotification();
+  const headers = getAuthHeaders();
 
-  const class10A = students.filter(s => s.class === '10A');
-  const presentCount = Object.values(todayAttendance).filter(Boolean).length;
-  const presentPercent = Math.round((presentCount / students.length) * 100);
-  const atRiskCount = students.filter(s => {
-    const avg = getAverageMarks(s.id);
-    const att = getAttendanceRate(s.id);
-    return avg < 50 || att < 75;
-  }).length;
+  // Teacher's assigned class — read from user doc
+  const tClass = user?.assignedClass || '';
+  const tDiv = user?.assignedDivision || '';
 
-  // Chart data
-  const subjectAvgs = marks.subjects.map(s => ({
-    name: s.length > 6 ? s.slice(0, 6) + '.' : s,
-    fullName: s,
-    avg: getClassAverage(s),
-  }));
+  /* ── Shared styles ── */
+  const sectionStyle = { padding: '24px', background: 'var(--bg-card)', border: '1px solid var(--border-default)', borderRadius: 'var(--radius-lg)', marginBottom: '24px' };
+  const inputStyle = { width: '100%', padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', border: '1px solid var(--border-default)', color: 'var(--text-primary)', fontSize: '0.9rem' };
+  const labelStyle = { fontSize: '0.85rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px', fontWeight: 500 };
+  const btnPrimary = { padding: '10px 20px', borderRadius: 'var(--radius-md)', background: 'linear-gradient(135deg, var(--primary), var(--violet))', color: 'white', fontWeight: 600, fontSize: '0.85rem', border: 'none', cursor: 'pointer' };
+  const thStyle = { padding: '12px', textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-default)', fontWeight: 600 };
+  const tdStyle = { padding: '12px', fontSize: '0.85rem', borderBottom: '1px solid var(--border-default)' };
 
-  const attendanceTrend = Array.from({ length: 10 }, (_, i) => ({
-    name: `Day ${i + 1}`,
-    rate: Math.round(70 + Math.random() * 25),
-  }));
+  /* ── State ── */
+  const [classInput, setClassInput] = useState(tClass);
+  const [divInput, setDivInput] = useState(tDiv);
+  const [students, setStudents] = useState([]);
+  const [attDate, setAttDate] = useState(new Date().toISOString().slice(0, 10));
+  const [attRecords, setAttRecords] = useState({}); // { studentId: 'present'|'absent' }
+  const [attAlreadySubmitted, setAttAlreadySubmitted] = useState(false);
+  const [submittingAtt, setSubmittingAtt] = useState(false);
 
-  const performanceTrend = [
-    { name: 'Test 1', score: 62, classAvg: 58 },
-    { name: 'Test 2', score: 65, classAvg: 60 },
-    { name: 'Test 3', score: 61, classAvg: 59 },
-    { name: 'Test 4', score: 68, classAvg: 63 },
-  ];
+  const [overview, setOverview] = useState({ totalStudents: 0, averageAttendance: 0, students: [] });
 
-  const gradeDistribution = [
-    { name: 'A+', value: 3, color: '#10b981' },
-    { name: 'A', value: 4, color: '#22c55e' },
-    { name: 'B', value: 3, color: '#06b6d4' },
-    { name: 'C', value: 2, color: '#f59e0b' },
-    { name: 'D', value: 1, color: '#f97316' },
-    { name: 'F', value: 2, color: '#f43f5e' },
-  ];
+  const [timetableSlots, setTimetableSlots] = useState([]);
 
-  const toggleAttendance = (studentId) => {
-    setTodayAttendance(prev => ({ ...prev, [studentId]: !prev[studentId] }));
+  const [leaves, setLeaves] = useState([]);
+  const [leaveFilter, setLeaveFilter] = useState('');
+
+  const cls = classInput || tClass;
+  const div = divInput || tDiv;
+
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const periods = [1, 2, 3, 4, 5, 6, 7, 8];
+
+  /* ── Fetchers ── */
+  const fetchStudents = async () => {
+    if (!cls || !div) return;
+    try {
+      const res = await axios.get(`${API_URL}/teacher/students?class=${cls}&division=${div}`, { headers });
+      const list = res.data.data || [];
+      setStudents(list);
+      // default all to absent
+      const defaultRec = {};
+      list.forEach(s => { defaultRec[s._id] = 'absent'; });
+      setAttRecords(defaultRec);
+    } catch (err) { console.error(err); }
   };
 
-  const markAll = (present) => {
-    const updated = {};
-    students.forEach(s => { updated[s.id] = present; });
-    setTodayAttendance(updated);
-    success(present ? 'All marked present' : 'All marked absent');
+  const fetchExistingAttendance = async () => {
+    if (!cls || !div) return;
+    try {
+      const res = await axios.get(`${API_URL}/teacher/attendance?date=${attDate}&class=${cls}&division=${div}`, { headers });
+      const existing = res.data.data || [];
+      if (existing.length > 0) {
+        setAttAlreadySubmitted(true);
+        const rec = {};
+        existing.forEach(r => { rec[r.studentId?._id || r.studentId] = r.status; });
+        setAttRecords(prev => ({ ...prev, ...rec }));
+      } else {
+        setAttAlreadySubmitted(false);
+      }
+    } catch (err) { console.error(err); }
   };
 
-  const sectionStyle = {
-    padding: '24px',
-    background: 'var(--bg-card)',
-    border: '1px solid var(--border-default)',
-    borderRadius: 'var(--radius-lg)',
-    marginBottom: '24px',
+  const fetchOverview = async () => {
+    if (!cls || !div) return;
+    try {
+      const res = await axios.get(`${API_URL}/teacher/class-overview?class=${cls}&division=${div}`, { headers });
+      setOverview(res.data.data || { totalStudents: 0, averageAttendance: 0, students: [] });
+    } catch (err) { console.error(err); }
   };
+
+  const fetchTimetable = async () => {
+    if (!cls || !div) return;
+    try {
+      const res = await axios.get(`${API_URL}/teacher/timetable?class=${cls}&division=${div}`, { headers });
+      setTimetableSlots(res.data.data || []);
+    } catch (err) { console.error(err); }
+  };
+
+  // Sync profile on mount
+  useEffect(() => {
+    if (refreshUser) {
+      refreshUser().then(updatedUser => {
+        if (updatedUser?.assignedClass) setClassInput(updatedUser.assignedClass);
+        if (updatedUser?.assignedDivision) setDivInput(updatedUser.assignedDivision);
+      });
+    }
+  }, []);
+
+  const fetchLeaves = async () => {
+    if (!cls || !div) return;
+    try {
+      const params = new URLSearchParams({ class: cls, division: div });
+      if (leaveFilter) params.append('status', leaveFilter);
+      const res = await axios.get(`${API_URL}/teacher/leaves?${params}`, { headers });
+      setLeaves(res.data.data || []);
+    } catch (err) { console.error(err); }
+  };
+
+  // Load students when class/div changes
+  useEffect(() => { if (cls && div) { fetchStudents(); } }, [cls, div]);
+  useEffect(() => { if (activeSection === 'mark-attendance' && cls && div) { fetchStudents(); fetchExistingAttendance(); } }, [activeSection, attDate, cls, div]);
+  useEffect(() => { if (activeSection === 'class-overview' && cls && div) fetchOverview(); }, [activeSection, cls, div]);
+  useEffect(() => { if (activeSection === 'class-timetable' && cls && div) fetchTimetable(); }, [activeSection, cls, div]);
+  useEffect(() => { if (activeSection === 'leave-applications' && cls && div) fetchLeaves(); }, [activeSection, leaveFilter, cls, div]);
+
+  /* ── Handlers ── */
+  const handleSubmitAttendance = async () => {
+    if (students.length === 0) return info('No students loaded.');
+    setSubmittingAtt(true);
+    try {
+      const records = students.map(s => ({
+        studentId: s._id,
+        status: attRecords[s._id] || 'absent',
+      }));
+      await axios.post(`${API_URL}/teacher/attendance`, {
+        date: attDate, class: cls, division: div, records,
+      }, { headers });
+      success('Attendance saved successfully!');
+      setAttAlreadySubmitted(true);
+    } catch (err) {
+      info(err.response?.data?.message || 'Failed to submit attendance.');
+    } finally { setSubmittingAtt(false); }
+  };
+
+  const handleLeaveAction = async (leaveId, status) => {
+    try {
+      await axios.patch(`${API_URL}/teacher/leaves/${leaveId}`, { status }, { headers });
+      success(`Leave ${status}!`);
+      fetchLeaves();
+    } catch (err) {
+      info(err.response?.data?.message || `Failed to ${status} leave.`);
+    }
+  };
+
+  const handleSaveConfig = async () => {
+    if (!classInput || !divInput) return info('Please enter Class and Division before saving.');
+    try {
+      await axios.post(`${API_URL}/teacher/config`, {
+        assignedClass: classInput, assignedDivision: divInput
+      }, { headers });
+      success('Class assignment saved dynamically to your profile!');
+    } catch (err) {
+      info('Failed to save config.');
+    }
+  };
+
+  const getSlot = (day, period) => timetableSlots.find(s => s.day === day && s.period === period);
+
+  const presentCount = Object.values(attRecords).filter(v => v === 'present').length;
+  const absentCount = students.length - presentCount;
+
+  const tabs = ['overview', 'mark-attendance', 'class-overview', 'class-timetable', 'leave-applications'];
+
+  const needsClassSetup = !cls || !div;
 
   return (
     <div>
-      {/* Stats Row */}
+      {/* Class Config Bar */}
+      {needsClassSetup && (
+        <div style={{ ...sectionStyle, borderLeft: '3px solid var(--warning)', display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+            Set your assigned class and division to get started:
+          </span>
+          <input value={classInput} onChange={e => setClassInput(e.target.value)} placeholder="Class (e.g. 10)" style={{ ...inputStyle, width: '120px' }} />
+          <input value={divInput} onChange={e => setDivInput(e.target.value)} placeholder="Division (e.g. A)" style={{ ...inputStyle, width: '120px' }} />
+          <button onClick={handleSaveConfig} style={btnPrimary}>Save Default</button>
+        </div>
+      )}
+
+      {!needsClassSetup && (
+        <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Assigned Class:</span>
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, padding: '4px 12px', borderRadius: 'var(--radius-full)', background: 'rgba(99,102,241,0.12)', color: '#818cf8' }}>{cls} / {div}</span>
+          <button onClick={() => { setClassInput(''); setDivInput(''); }} style={{ fontSize: '0.75rem', color: 'var(--text-muted)', background: 'none', textDecoration: 'underline', cursor: 'pointer', border: 'none' }}>Change</button>
+          <button onClick={handleSaveConfig} style={{ fontSize: '0.75rem', color: 'var(--primary)', background: 'none', textDecoration: 'underline', cursor: 'pointer', border: 'none' }}>Save as Default</button>
+        </div>
+      )}
+
+      {/* Stat Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-        <StatCard icon="👥" value={students.length} label="Total Students" color="var(--primary)" delay={0} />
-        <StatCard icon="✅" value={presentPercent} suffix="%" label="Present Today" color="var(--emerald)" delay={1} />
-        <StatCard icon="⚠️" value={atRiskCount} label="At Risk (AI)" color="var(--danger)" delay={2} />
-        <StatCard icon="📋" value={3} label="Pending Reports" color="var(--warning)" delay={3} />
+        {[
+          { label: 'Total Students', value: students.length, color: 'var(--primary)' },
+          { label: 'Present Today', value: presentCount, color: 'var(--emerald)' },
+          { label: 'Absent Today', value: absentCount, color: 'var(--danger)' },
+          { label: 'Leave Requests', value: leaves.length, color: 'var(--warning)' },
+        ].map((card, i) => (
+          <div key={i} style={{ ...sectionStyle, marginBottom: 0, textAlign: 'center', borderLeft: `3px solid ${card.color}` }}>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '8px' }}>{card.label}</div>
+            <div style={{ fontFamily: 'var(--font-heading)', fontSize: '2rem', fontWeight: 700, color: card.color }}>{card.value}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Quick Nav Tabs */}
+      {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        {['overview', 'attendance', 'marks', 'risk', 'insights', 'reports'].map(tab => (
+        {tabs.map(tab => (
           <button key={tab} onClick={() => handleTabChange(tab)} style={{
             padding: '8px 18px', borderRadius: 'var(--radius-full)',
             background: activeSection === tab ? 'linear-gradient(135deg, var(--primary), var(--violet))' : 'var(--bg-card)',
             border: activeSection === tab ? 'none' : '1px solid var(--border-default)',
             color: activeSection === tab ? 'white' : 'var(--text-secondary)',
             fontSize: '0.85rem', fontWeight: 600, textTransform: 'capitalize',
-            transition: 'all 0.3s var(--spring)',
-          }}>{tab}</button>
+            transition: 'all 0.3s var(--spring)', cursor: 'pointer',
+          }}>{tab.replace(/-/g, ' ')}</button>
         ))}
       </div>
 
       {/* ═══ OVERVIEW ═══ */}
       {activeSection === 'overview' && (
-        <>
-          {/* Charts Row */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-            <PerformanceChart data={performanceTrend} title="📈 Class Performance Trend" />
-            <AttendanceChart data={attendanceTrend} title="📋 Attendance Trend (10 Days)" />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '16px', marginBottom: '24px' }}>
-            {/* Subject Comparison */}
-            <div style={sectionStyle}>
-              <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '16px' }}>
-                📊 Subject-wise Average
-              </h4>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={subjectAvgs}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="name" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-                  <YAxis domain={[0, 100]} tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
-                  <Tooltip contentStyle={{ background: 'rgba(2,8,23,0.95)', border: '1px solid var(--border-default)', borderRadius: 8 }} />
-                  <Bar dataKey="avg" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Grade Distribution */}
-            <div style={sectionStyle}>
-              <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '0.95rem', fontWeight: 600, marginBottom: '16px' }}>
-                🎯 Grade Distribution
-              </h4>
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={gradeDistribution} cx="50%" cy="50%" innerRadius={50} outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                    {gradeDistribution.map((entry, i) => <Cell key={i} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: 'rgba(2,8,23,0.95)', border: '1px solid var(--border-default)', borderRadius: 8 }} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* AI Teaching Suggestions */}
-          <div style={sectionStyle}>
-            <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-              🧠 AI Teaching Co-Pilot
-            </h4>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
-              {aiInsights.classInsights.filter(i => !dismissedInsights.includes(i.id)).map(insight => (
-                <div key={insight.id} style={{
-                  padding: '16px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-deep)',
-                  border: '1px solid var(--border-default)',
-                  animation: 'floatSubtle 4s ease-in-out infinite',
-                  transition: 'all 0.3s var(--spring)',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.borderColor = 'var(--border-default)'; }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--primary-light)', textTransform: 'uppercase' }}>
-                      {insight.icon} {insight.title}
-                    </span>
-                    <button onClick={() => setDismissedInsights(p => [...p, insight.id])} style={{
-                      background: 'none', color: 'var(--text-muted)', fontSize: '14px', padding: 0,
-                    }}>✕</button>
-                  </div>
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>{insight.text}</p>
-                  <p style={{ fontSize: '0.8rem', color: 'var(--ai-glow)', marginBottom: '12px' }}>→ {insight.action}</p>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <button style={{
-                      padding: '6px 14px', borderRadius: 'var(--radius-full)',
-                      background: 'linear-gradient(135deg, var(--primary), var(--violet))',
-                      color: 'white', fontSize: '0.75rem', fontWeight: 600,
-                    }} onClick={() => info('Action applied!')}>{insight.actionLabel}</button>
-                    <button onClick={() => setDismissedInsights(p => [...p, insight.id])} style={{
-                      padding: '6px 14px', borderRadius: 'var(--radius-full)',
-                      background: 'var(--bg-card)', border: '1px solid var(--border-default)',
-                      color: 'var(--text-muted)', fontSize: '0.75rem',
-                    }}>Dismiss</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </>
+        <div style={sectionStyle}>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', fontWeight: 600, marginBottom: '16px' }}>Teacher Dashboard</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.7 }}>
+            Welcome, {user?.name || 'Teacher'}. You are assigned to Class {cls} Division {div}. Use the tabs above to mark attendance, view class overview, see the timetable, and manage leave applications.
+          </p>
+        </div>
       )}
 
-      {/* ═══ ATTENDANCE ═══ */}
-      {activeSection === 'attendance' && (
-        <>
-          <div style={sectionStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-              <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 600 }}>
-                📋 Smart Attendance Panel
-              </h4>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <button onClick={() => markAll(true)} style={{
-                  padding: '8px 16px', borderRadius: 'var(--radius-full)',
-                  background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)',
-                  color: '#10b981', fontSize: '0.8rem', fontWeight: 600,
-                }}>✅ Mark All Present</button>
-                <button onClick={() => markAll(false)} style={{
-                  padding: '8px 16px', borderRadius: 'var(--radius-full)',
-                  background: 'rgba(244,63,94,0.15)', border: '1px solid rgba(244,63,94,0.3)',
-                  color: '#f43f5e', fontSize: '0.8rem', fontWeight: 600,
-                }}>❌ Mark All Absent</button>
-                <GradientButton size="sm" onClick={() => setAiPanelVisible(!aiPanelVisible)}>
-                  🧠 Analyze with AI
-                </GradientButton>
-              </div>
+      {/* ═══ MARK ATTENDANCE ═══ */}
+      {activeSection === 'mark-attendance' && (
+        <div style={sectionStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 600 }}>
+              Mark Attendance — Class {cls} / {div}
+            </h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <label style={{ ...labelStyle, marginBottom: 0 }}>Date:</label>
+              <input type="date" value={attDate} onChange={e => setAttDate(e.target.value)} style={{ ...inputStyle, width: '180px' }} />
             </div>
+          </div>
 
-            {/* Student Table */}
-            <div style={{ overflowX: 'auto' }}>
+          {attAlreadySubmitted && (
+            <div style={{ padding: '10px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b', fontSize: '0.85rem', marginBottom: '16px' }}>
+              Attendance already submitted for {attDate}. You can update it by re-submitting.
+            </div>
+          )}
+
+          {students.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No students found for Class {cls} / {div}.</p>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
+                <button onClick={() => {
+                  const updated = {};
+                  students.forEach(s => { updated[s._id] = 'present'; });
+                  setAttRecords(updated);
+                }} style={{ padding: '6px 14px', borderRadius: 'var(--radius-full)', background: 'rgba(16,185,129,0.15)', border: '1px solid rgba(16,185,129,0.3)', color: '#10b981', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                  Mark All Present
+                </button>
+                <button onClick={() => {
+                  const updated = {};
+                  students.forEach(s => { updated[s._id] = 'absent'; });
+                  setAttRecords(updated);
+                }} style={{ padding: '6px 14px', borderRadius: 'var(--radius-full)', background: 'rgba(244,63,94,0.15)', border: '1px solid rgba(244,63,94,0.3)', color: '#f43f5e', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+                  Mark All Absent
+                </button>
+              </div>
+
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr>
-                    {['', 'Name', 'Roll No', 'Status', 'Streak', 'Attendance %'].map(h => (
-                      <th key={h} style={{ padding: '12px', textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-default)', fontWeight: 600 }}>{h}</th>
-                    ))}
+                    {['Name', 'Status'].map(h => <th key={h} style={thStyle}>{h}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {students.map(student => {
-                    const isPresent = todayAttendance[student.id];
+                  {students.map(s => {
+                    const status = attRecords[s._id] || 'absent';
                     return (
-                      <tr key={student.id} style={{ borderBottom: '1px solid var(--border-default)', transition: 'background 0.2s' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <td style={{ padding: '12px' }}>
-                          <div style={{
-                            width: 36, height: 36, borderRadius: '50%',
-                            background: 'linear-gradient(135deg, var(--primary), var(--violet))',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: 'white', fontSize: '0.7rem', fontWeight: 700,
-                          }}>{student.avatar}</div>
+                      <tr key={s._id}>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{
+                              width: 32, height: 32, borderRadius: '50%',
+                              background: 'linear-gradient(135deg, var(--primary), var(--violet))',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              color: 'white', fontSize: '0.65rem', fontWeight: 700,
+                            }}>{(s.name || '??').split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</div>
+                            <span style={{ fontWeight: 500 }}>{s.name}</span>
+                          </div>
                         </td>
-                        <td style={{ padding: '12px', fontSize: '0.9rem', fontWeight: 500 }}>{student.name}</td>
-                        <td style={{ padding: '12px', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{student.rollNo}</td>
-                        <td style={{ padding: '12px' }}>
-                          <button onClick={() => toggleAttendance(student.id)} style={{
-                            padding: '6px 16px',
-                            borderRadius: 'var(--radius-full)',
-                            background: isPresent ? 'rgba(16,185,129,0.2)' : 'rgba(244,63,94,0.2)',
-                            border: `1px solid ${isPresent ? '#10b981' : '#f43f5e'}40`,
-                            color: isPresent ? '#10b981' : '#f43f5e',
-                            fontSize: '0.8rem', fontWeight: 600,
-                            transition: 'all 0.3s var(--spring)',
-                            minWidth: '80px',
-                          }}>
-                            {isPresent ? '✓ Present' : '✗ Absent'}
-                          </button>
-                        </td>
-                        <td style={{ padding: '12px', fontSize: '0.85rem' }}>
-                          🔥 {getAttendanceStreak(student.id)} days
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--bg-deep)', maxWidth: '80px' }}>
-                              <div style={{ height: '100%', borderRadius: 3, background: getAttendanceRate(student.id) > 75 ? '#10b981' : '#f43f5e', width: `${getAttendanceRate(student.id)}%`, transition: 'width 0.5s' }} />
-                            </div>
-                            <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{getAttendanceRate(student.id)}%</span>
+                        <td style={tdStyle}>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <button onClick={() => setAttRecords(prev => ({ ...prev, [s._id]: 'present' }))} style={{
+                              padding: '6px 16px', borderRadius: 'var(--radius-full)',
+                              background: status === 'present' ? 'rgba(16,185,129,0.2)' : 'var(--bg-deep)',
+                              border: `1px solid ${status === 'present' ? '#10b981' : 'var(--border-default)'}`,
+                              color: status === 'present' ? '#10b981' : 'var(--text-muted)',
+                              fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+                            }}>Present</button>
+                            <button onClick={() => setAttRecords(prev => ({ ...prev, [s._id]: 'absent' }))} style={{
+                              padding: '6px 16px', borderRadius: 'var(--radius-full)',
+                              background: status === 'absent' ? 'rgba(244,63,94,0.2)' : 'var(--bg-deep)',
+                              border: `1px solid ${status === 'absent' ? '#f43f5e' : 'var(--border-default)'}`,
+                              color: status === 'absent' ? '#f43f5e' : 'var(--text-muted)',
+                              fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s',
+                            }}>Absent</button>
                           </div>
                         </td>
                       </tr>
@@ -290,166 +326,180 @@ export default function TeacherDashboard() {
                   })}
                 </tbody>
               </table>
-            </div>
-          </div>
 
-          {/* AI Panel */}
-          {aiPanelVisible && (
-            <AIInsightBox
-              title="Attendance Pattern Analysis"
-              prompt="Analyze attendance patterns for a class of 15 students over the past month. Identify day-of-week patterns, individual concerns, and recommendations."
-              onGenerate={(prompt, onStream) => generateResponse(prompt, onStream)}
-            />
+              <button onClick={handleSubmitAttendance} disabled={submittingAtt} style={{ ...btnPrimary, marginTop: '16px', opacity: submittingAtt ? 0.6 : 1 }}>
+                {submittingAtt ? 'Saving...' : 'Submit Attendance'}
+              </button>
+            </>
           )}
-
-          {/* Heatmap */}
-          <div style={{ marginTop: '24px' }}>
-            <HeatmapCalendar data={getMonthlyHeatmap(1)} title="📅 Monthly Attendance Heatmap (Sample: Aarav)" />
-          </div>
-        </>
+        </div>
       )}
 
-      {/* ═══ MARKS ═══ */}
-      {activeSection === 'marks' && (
-        <>
-          <div style={sectionStyle}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
-              <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 600 }}>
-                ✏️ Marks Entry & AI Feedback
-              </h4>
-              {/* Subject Tabs */}
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {marks.subjects.map(s => (
-                  <button key={s} onClick={() => setSelectedSubject(s)} style={{
-                    padding: '6px 14px', borderRadius: 'var(--radius-full)',
-                    background: selectedSubject === s ? 'var(--primary)' : 'var(--bg-deep)',
-                    color: selectedSubject === s ? 'white' : 'var(--text-muted)',
-                    fontSize: '0.8rem', fontWeight: 600, border: selectedSubject === s ? 'none' : '1px solid var(--border-default)',
-                    transition: 'all 0.3s',
-                  }}>{s}</button>
-                ))}
-              </div>
-            </div>
+      {/* ═══ CLASS OVERVIEW ═══ */}
+      {activeSection === 'class-overview' && (
+        <div style={sectionStyle}>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 600, marginBottom: '20px' }}>
+            Class Overview — {cls} / {div}
+          </h3>
 
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
+            <div style={{ padding: '16px', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', border: '1px solid var(--border-default)', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Total Students</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: '1.8rem', fontWeight: 700, color: 'var(--primary)' }}>{overview.totalStudents}</div>
+            </div>
+            <div style={{ padding: '16px', borderRadius: 'var(--radius-md)', background: 'var(--bg-deep)', border: '1px solid var(--border-default)', textAlign: 'center' }}>
+              <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Average Attendance</div>
+              <div style={{ fontFamily: 'var(--font-heading)', fontSize: '1.8rem', fontWeight: 700, color: 'var(--emerald)' }}>{overview.averageAttendance}%</div>
+            </div>
+          </div>
+
+          {overview.students && overview.students.length > 0 ? (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['Student', 'Present Days', 'Absent Days', 'Attendance %'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {overview.students.map(s => (
+                  <tr key={s._id}>
+                    <td style={tdStyle}>{s.name}</td>
+                    <td style={tdStyle}><span style={{ color: 'var(--emerald)', fontWeight: 600 }}>{s.present}</span></td>
+                    <td style={tdStyle}><span style={{ color: 'var(--danger)', fontWeight: 600 }}>{s.absent}</span></td>
+                    <td style={tdStyle}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--bg-deep)', maxWidth: '100px' }}>
+                          <div style={{ height: '100%', borderRadius: 3, background: s.percentage >= 75 ? '#10b981' : '#f43f5e', width: `${s.percentage}%`, transition: 'width 0.5s' }} />
+                        </div>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: s.percentage >= 75 ? 'var(--emerald)' : 'var(--danger)' }}>{s.percentage}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No attendance data available yet.</p>
+          )}
+        </div>
+      )}
+
+      {/* ═══ CLASS TIMETABLE ═══ */}
+      {activeSection === 'class-timetable' && (
+        <div style={sectionStyle}>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 600, marginBottom: '16px' }}>
+            Class Timetable — {cls} / {div}
+          </h3>
+          {timetableSlots.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No timetable configured for this class yet. Ask your admin to set it up.</p>
+          ) : (
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <thead>
                   <tr>
-                    {['Name', 'Marks', 'Grade', 'AI Feedback'].map(h => (
-                      <th key={h} style={{ padding: '12px', textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-muted)', borderBottom: '1px solid var(--border-default)', fontWeight: 600 }}>{h}</th>
-                    ))}
+                    <th style={{ ...thStyle, width: '80px' }}>Period</th>
+                    {days.map(d => <th key={d} style={thStyle}>{d}</th>)}
                   </tr>
                 </thead>
                 <tbody>
-                  {students.map(student => {
-                    const latestMarks = getLatestMarks(student.id);
-                    const subjectMark = latestMarks[selectedSubject] || 0;
-                    const gradeInfo = getGradeInfo(subjectMark);
-                    return (
-                      <tr key={student.id} style={{ borderBottom: '1px solid var(--border-default)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-card-hover)'}
-                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                      >
-                        <td style={{ padding: '12px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{
-                            width: 32, height: 32, borderRadius: '50%',
-                            background: 'linear-gradient(135deg, var(--primary), var(--violet))',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            color: 'white', fontSize: '0.65rem', fontWeight: 700,
-                          }}>{student.avatar}</div>
-                          <span style={{ fontSize: '0.9rem', fontWeight: 500 }}>{student.name}</span>
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: gradeInfo.color }}>{subjectMark}</span>
-                          <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>/100</span>
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <span style={{
-                            padding: '4px 10px', borderRadius: 'var(--radius-full)',
-                            background: `${gradeInfo.color}15`, color: gradeInfo.color,
-                            fontSize: '0.75rem', fontWeight: 700,
-                          }}>{gradeInfo.grade}</span>
-                        </td>
-                        <td style={{ padding: '12px' }}>
-                          <button onClick={() => setSelectedStudent(student)} style={{
-                            padding: '6px 14px', borderRadius: 'var(--radius-full)',
-                            background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.3)',
-                            color: 'var(--ai-glow)', fontSize: '0.75rem', fontWeight: 600,
-                          }}>🧠 Generate</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {periods.map(p => (
+                    <tr key={p}>
+                      <td style={{ ...tdStyle, fontWeight: 600, textAlign: 'center' }}>P{p}</td>
+                      {days.map(d => {
+                        const slot = getSlot(d, p);
+                        return (
+                          <td key={d} style={{ ...tdStyle, fontSize: '0.8rem' }}>
+                            {slot ? (
+                              <div>
+                                <div style={{ fontWeight: 600, color: 'var(--primary)' }}>{slot.subject}</div>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{slot.teacherId?.name || ''}</div>
+                              </div>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>—</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
-          </div>
-
-          {/* Class Average */}
-          <div style={{ marginBottom: '24px', padding: '16px 20px', borderRadius: 'var(--radius-md)', background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '1.2rem' }}>📊</span>
-            <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-              Class Average for <strong>{selectedSubject}</strong>: <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 700, color: 'var(--cyan)' }}>{getClassAverage(selectedSubject)}%</span>
-            </span>
-          </div>
-
-          {selectedStudent && (
-            <AIFeedbackPanel student={selectedStudent} marks={getLatestMarks(selectedStudent.id)} />
           )}
-        </>
+        </div>
       )}
 
-      {/* ═══ RISK ═══ */}
-      {activeSection === 'risk' && <RiskDetector />}
-
-      {/* ═══ INSIGHTS ═══ */}
-      {activeSection === 'insights' && (
-        <AIInsightBox
-          title="AI Teaching Suggestions"
-          prompt="Based on class performance data, suggest specific teaching improvements, scheduling optimizations, and student engagement techniques."
-          onGenerate={(prompt, onStream) => generateResponse(prompt, onStream)}
-        />
-      )}
-
-      {/* ═══ REPORTS ═══ */}
-      {activeSection === 'reports' && (
+      {/* ═══ LEAVE APPLICATIONS ═══ */}
+      {activeSection === 'leave-applications' && (
         <div style={sectionStyle}>
-          <h4 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 600, marginBottom: '20px' }}>
-            📄 AI Report Generator
-          </h4>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-            {['Progress Report', 'Attendance Report', 'Full Report Card', 'Risk Report'].map(type => (
-              <button key={type} style={{
-                padding: '16px', borderRadius: 'var(--radius-md)',
-                background: 'var(--bg-deep)', border: '1px solid var(--border-default)',
-                color: 'var(--text-secondary)', fontSize: '0.9rem', fontWeight: 500,
-                transition: 'all 0.3s var(--spring)', textAlign: 'left',
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.transform = 'translateY(-4px)'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border-default)'; e.currentTarget.style.transform = ''; }}
-              onClick={() => info(`Generating ${type}...`)}
-              >
-                📋 {type}
-              </button>
-            ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 600 }}>
+              Leave Applications — {cls} / {div}
+            </h3>
+            <div style={{ display: 'flex', gap: '6px' }}>
+              {['', 'pending', 'approved', 'rejected'].map(f => (
+                <button key={f} onClick={() => setLeaveFilter(f)} style={{
+                  padding: '6px 14px', borderRadius: 'var(--radius-full)',
+                  background: leaveFilter === f ? 'var(--primary)' : 'var(--bg-deep)',
+                  border: leaveFilter === f ? 'none' : '1px solid var(--border-default)',
+                  color: leaveFilter === f ? 'white' : 'var(--text-muted)',
+                  fontSize: '0.8rem', fontWeight: 600, textTransform: 'capitalize', cursor: 'pointer',
+                }}>{f || 'All'}</button>
+              ))}
+            </div>
           </div>
-          <AIInsightBox
-            title="Report Card Generator"
-            prompt="Generate a comprehensive report card for the class with per-student analysis, grades, attendance, and teacher recommendations."
-            onGenerate={(prompt, onStream) => generateResponse(prompt, onStream)}
-          />
+
+          {leaves.length === 0 ? (
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No leave applications found.</p>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {['Student', 'From', 'To', 'Reason', 'Status', 'Actions'].map(h => <th key={h} style={thStyle}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {leaves.map(l => {
+                  const statusColors = { pending: '#f59e0b', approved: '#10b981', rejected: '#f43f5e' };
+                  return (
+                    <tr key={l._id}>
+                      <td style={tdStyle}>{l.studentId?.name || '—'}</td>
+                      <td style={tdStyle}>{new Date(l.fromDate).toLocaleDateString()}</td>
+                      <td style={tdStyle}>{new Date(l.toDate).toLocaleDateString()}</td>
+                      <td style={{ ...tdStyle, maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.reason}</td>
+                      <td style={tdStyle}>
+                        <span style={{
+                          padding: '4px 12px', borderRadius: 'var(--radius-full)', fontSize: '0.75rem', fontWeight: 600,
+                          background: `${statusColors[l.status]}15`, color: statusColors[l.status],
+                          textTransform: 'capitalize',
+                        }}>{l.status}</span>
+                      </td>
+                      <td style={tdStyle}>
+                        {l.status === 'pending' ? (
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button onClick={() => handleLeaveAction(l._id, 'approved')} style={{
+                              padding: '4px 12px', borderRadius: 'var(--radius-md)',
+                              background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)',
+                              color: '#10b981', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                            }}>Approve</button>
+                            <button onClick={() => handleLeaveAction(l._id, 'rejected')} style={{
+                              padding: '4px 12px', borderRadius: 'var(--radius-md)',
+                              background: 'rgba(244,63,94,0.12)', border: '1px solid rgba(244,63,94,0.3)',
+                              color: '#f43f5e', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                            }}>Reject</button>
+                          </div>
+                        ) : (
+                          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>
   );
-}
-
-function getGradeInfo(marks) {
-  if (marks >= 90) return { grade: 'A+', color: '#10b981' };
-  if (marks >= 80) return { grade: 'A', color: '#22c55e' };
-  if (marks >= 70) return { grade: 'B+', color: '#06b6d4' };
-  if (marks >= 60) return { grade: 'B', color: '#3b82f6' };
-  if (marks >= 50) return { grade: 'C', color: '#f59e0b' };
-  if (marks >= 40) return { grade: 'D', color: '#f97316' };
-  return { grade: 'F', color: '#f43f5e' };
 }

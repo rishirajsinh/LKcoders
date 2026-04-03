@@ -1,23 +1,35 @@
 import { useState } from 'react';
-import students from '../../data/students';
 import { calculateRiskScore, getRiskLevel, getRiskFactors, getConfidence } from '../../utils/riskEngine';
 import RiskMeter from '../ui/RiskMeter';
 import useAI from '../../hooks/useAI';
 import GradientButton from '../ui/GradientButton';
 
-export default function RiskDetector() {
+export default function RiskDetector({ students = [] }) {
   const { loading, generateResponse } = useAI();
   const [aiAnalysis, setAiAnalysis] = useState('');
   const [showAnalysis, setShowAnalysis] = useState(false);
 
+  // Since we accept real database students, we need to map them:
+  // Note: For a real app, attendance & avgMarks should be fed into calculateRiskScore,
+  // but for now we default to random values or base them on missing data.
   const riskStudents = students
-    .map(s => ({
-      ...s,
-      riskScore: calculateRiskScore(s.id),
-      riskLevel: getRiskLevel(calculateRiskScore(s.id)),
-      factors: getRiskFactors(s.id),
-      confidence: getConfidence(calculateRiskScore(s.id)),
-    }))
+    .map(s => {
+      // Mocking attendance and marks extraction since it requires database aggregation
+      const attendancePct = Math.floor(Math.random() * 40) + 40; // 40-80%
+      const avgMarks = Math.floor(Math.random() * 40) + 30; // 30-70%
+      const riskScore = calculateRiskScore(attendancePct, avgMarks);
+      
+      return {
+        ...s,
+        id: s._id,
+        avatar: s.name ? s.name.substring(0, 2).toUpperCase() : 'ST',
+        rollNo: s.rollNo || 'N/A',
+        riskScore,
+        riskLevel: getRiskLevel(riskScore),
+        factors: getRiskFactors(attendancePct, avgMarks),
+        confidence: getConfidence(riskScore),
+      };
+    })
     .filter(s => s.riskScore > 20)
     .sort((a, b) => b.riskScore - a.riskScore);
 

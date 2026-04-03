@@ -27,6 +27,10 @@ router.post('/register', async (req, res, next) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      class: user.class || '',
+      division: user.division || '',
+      assignedClass: user.assignedClass || '',
+      assignedDivision: user.assignedDivision || '',
       token: generateToken(user._id),
     });
   } catch (err) {
@@ -47,6 +51,10 @@ router.post('/login', async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        class: user.class || '',
+        division: user.division || '',
+        assignedClass: user.assignedClass || '',
+        assignedDivision: user.assignedDivision || '',
         token: generateToken(user._id),
       });
     } else {

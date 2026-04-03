@@ -1,16 +1,9 @@
-import { getAttendanceRate } from '../data/attendance';
-import { getAverageMarks } from '../data/marks';
-
-export function calculateRiskScore(studentId) {
-  const attendance = getAttendanceRate(studentId);
-  const avgMarks = getAverageMarks(studentId);
-  
+export function calculateRiskScore(attendancePct, avgMarks) {
   // Risk formula: weighted combination
-  const attendanceRisk = Math.max(0, (75 - attendance) * 1.5);
+  const attendanceRisk = Math.max(0, (75 - attendancePct) * 1.5);
   const marksRisk = Math.max(0, (50 - avgMarks) * 1.2);
   
   const riskScore = Math.min(100, Math.round(attendanceRisk + marksRisk));
-  
   return riskScore;
 }
 
@@ -21,16 +14,14 @@ export function getRiskLevel(score) {
   return { label: 'SAFE', color: '#10b981', emoji: '🟢' };
 }
 
-export function getRiskFactors(studentId) {
-  const attendance = getAttendanceRate(studentId);
-  const avgMarks = getAverageMarks(studentId);
+export function getRiskFactors(attendancePct, avgMarks) {
   const factors = [];
   
-  if (attendance < 75) factors.push('Low attendance (' + attendance + '%)');
-  if (attendance < 60) factors.push('Critical attendance level');
+  if (attendancePct < 75) factors.push('Low attendance (' + attendancePct + '%)');
+  if (attendancePct < 60) factors.push('Critical attendance level');
   if (avgMarks < 40) factors.push('Failing grades');
   if (avgMarks < 50) factors.push('Below average marks (' + avgMarks + '%)');
-  if (avgMarks < 60 && attendance < 80) factors.push('Combined attendance-marks risk');
+  if (avgMarks < 60 && attendancePct < 80) factors.push('Combined attendance-marks risk');
   
   return factors.length > 0 ? factors : ['No significant risk factors'];
 }

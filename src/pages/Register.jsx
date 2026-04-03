@@ -75,17 +75,13 @@ export default function Register() {
         animation: 'fadeInScale 0.5s var(--spring)', position: 'relative', zIndex: 1,
       }}>
         {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: '28px' }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: '14px',
-            background: 'linear-gradient(135deg, var(--primary), var(--violet))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '28px', margin: '0 auto 16px',
-            animation: 'float 3s ease-in-out infinite',
-            boxShadow: '0 0 30px rgba(99,102,241,0.4)',
-          }}>🧠</div>
+        <div style={{ textAlign: 'center', marginBottom: '28px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <svg viewBox="0 0 100 100" width="56" height="56" xmlns="http://www.w3.org/2000/svg" style={{ marginBottom: '16px' }}>
+            <path d="M50 15 L20 75 L38 75 L50 48 L62 75 L80 75 Z" fill="#FFC800" />
+            <polygon points="50,60 42,75 58,75" fill="#FFC800" />
+          </svg>
           <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.5rem', fontWeight: 700 }}>Create Account</h2>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Join EduFlow AI in minutes</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Join Edubase in minutes</p>
         </div>
 
         {/* Step Indicator */}
@@ -142,9 +138,9 @@ export default function Register() {
                 <label style={labelStyle}>Select Role</label>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   {[
-                    { key: 'teacher', label: '👨‍🏫 Teacher', color: 'var(--primary)' },
-                    { key: 'student', label: '🎓 Student', color: 'var(--cyan)' },
-                    { key: 'admin', label: '🏫 Admin', color: 'var(--violet)' },
+                    { key: 'teacher', label: 'Teacher', color: 'var(--primary)' },
+                    { key: 'student', label: 'Student', color: 'var(--cyan)' },
+                    { key: 'admin', label: 'Admin', color: 'var(--violet)' },
                   ].map(r => (
                     <button key={r.key} type="button" onClick={() => updateForm('role', r.key)} style={{
                       flex: 1, padding: '12px',
