@@ -58,9 +58,8 @@ export default function TeacherCoPilot({ students, overview, activeSection }) {
           position: 'fixed',
           bottom: '24px',
           right: '24px',
-          width: '60px',
-          height: '60px',
-          borderRadius: '50%',
+          padding: '12px 24px',
+          borderRadius: 'var(--radius-full)',
           background: 'linear-gradient(135deg, var(--primary), var(--violet))',
           color: 'white',
           border: 'none',
@@ -68,15 +67,17 @@ export default function TeacherCoPilot({ students, overview, activeSection }) {
           boxShadow: '0 8px 32px rgba(99, 102, 241, 0.4)',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: '1.5rem',
-          zIndex: 1000,
-          transition: 'transform 0.3s var(--spring)',
+          gap: '10px',
+          fontSize: '0.95rem',
+          fontWeight: 700,
+          zIndex: 9999,
+          transition: 'all 0.3s var(--spring)',
         }}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1) rotate(5deg)')}
-        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1) rotate(0deg)')}
+        onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
       >
-        {isOpen ? '✕' : '✨'}
+        <span style={{ fontSize: '1.4rem' }}>{isOpen ? '✕' : '✨'}</span>
+        <span>{isOpen ? 'Close Assistant' : 'AI Co-pilot'}</span>
       </button>
 
       {/* Co-pilot Drawer */}
