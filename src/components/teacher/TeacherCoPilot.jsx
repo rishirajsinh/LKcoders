@@ -37,13 +37,19 @@ export default function TeacherCoPilot({ students, overview, activeSection }) {
     setMessages(prev => [...prev, { role: 'user', content: text, time: userTime }]);
     setInput('');
 
+    // Prepare student data for AI context
+    const studentDataString = overview?.students?.map(s => 
+      `${s.name}: Attendance ${s.percentage}%, Present ${s.present}, Absent ${s.absent}`
+    ).join(' | ') || 'No student data available';
+
     // Prepare context-aware prompt
     const contextPrompt = `
       [SYSTEM]: You are a ChatGPT-style assistant. 
       IMPORTANT: Respond in Hinglish (a mix of Hindi and English) as the user prefers it.
       Mainly use English technical terms, but use Hindi for general explanation and conversation.
       Context: Teacher Dashboard, Section: ${activeSection}.
-      Data: ${students?.length} students, Avg Attendance: ${overview?.averageAttendance}%.
+      STUDENT_DATA: ${studentDataString}
+      Data Summary: ${students?.length} students, Avg Attendance: ${overview?.averageAttendance}%.
       User Query: ${text}
     `;
 

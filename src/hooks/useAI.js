@@ -65,57 +65,57 @@ export default function useAI() {
 }
 
 function getSimulatedResponse(prompt) {
-  // Extract real user query to avoid getting stuck on context keywords (like 'student')
+  // Extract real user query
   const cleanQuery = (prompt.split('User Query:')[1] || prompt.split('User Question:')[1] || prompt).trim();
   const lower = cleanQuery.toLowerCase();
 
-  // 1. Check for Academic/Teacher Specifics First
-  if (lower.includes('feedback') || lower.includes('report')) {
-    return `🤖 AI Analysis Report\n\n✅ Strengths Identified:\n• Strong performance in Science (89/100) and English (84/100)\n• Consistent attendance record showing dedication\n• Improvement trend visible in last 3 assessments\n\n⚠️ Areas Needing Attention:\n• Mathematics (41/100) — Algebra and Trigonometry concepts need reinforcement\n\n💡 Suggestions:\n• Assign Chapter 3-5 revision exercises\n• Pair with Sneha P. for peer tutoring.`;
+  // 1. Data-Driven Extraction: Parse STUDENT_DATA from the system prompt
+  const dataBlock = prompt.split('STUDENT_DATA:')[1]?.split('Data Summary:')[0]?.trim() || '';
+  const students = dataBlock.split(' | ').filter(s => s.includes(':')).map(s => {
+    const [name, rest] = s.split(': ');
+    const percentage = parseInt(rest.match(/Attendance (\d+)%/)?.[1] || '0');
+    return { name, percentage, raw: s };
+  });
+
+  // Utility to find specific stats
+  const topper = students.length > 0 ? students.reduce((max, s) => s.percentage > max.percentage ? s : max, students[0]) : null;
+  const lowest = students.length > 0 ? students.reduce((min, s) => s.percentage < min.percentage ? s : min, students[0]) : null;
+
+  // 2. Handle Logic Based on Dynamic Data
+  if (lower.includes('attenda') || lower.includes('presents') || lower.includes('absent')) {
+    if (lower.includes('kam') || lower.includes('low') || lower.includes('sabse') || lower.includes('min')) {
+      if (lowest) {
+        return `📉 Sabse kam attendance **${lowest.name}** ki hai (${lowest.percentage}%). \n\nKya main inke liye alert generate karun?`;
+      }
+    }
+    return `📊 Attendance Update:\n${students.map(s => `• ${s.name}: ${s.percentage}%`).join('\n')}\n\nAbhi class ki performance monitor ki ja rahi hai.`;
   }
 
-  if (lower.includes('risk') || lower.includes('at-risk')) {
-    return `⚠️ Risk Assessment Report\n\n🔴 CRITICAL RISK — 3 Students Identified:\n\n1. Rahul Kumar (STU003)\n2. Dev Joshi (STU007)\n3. Vikram Desai (STU009)\n\nInke liye immediate intervention chahiye.`;
+  if (lower.includes('topper') || lower.includes('sabse accha') || lower.includes('top') || lower.includes('marks') || lower.includes('grade') || lower.includes('rank')) {
+    if (topper) {
+      return `🏆 Class Topper **${topper.name}** hain, jinka attendance record ${topper.percentage}% hai. \n\nBaki students ki progress bhi track ho rahi hai.`;
+    }
   }
 
-  // 2. Handle Student Names (Specific Queries)
-  if (lower.includes('rishi')) {
-    return `👤 **Student Profile: Rishi**\n\n• **Attendance**: 95% (Excellent)\n• **Performance**: Science (92%), Math (88%)\n• **Status**: Top Performer\n• **Note**: Rishi class mein bohot active rehta hai aur consistently top grades la raha hai.`;
+  // Handle specific names in the data
+  const mentionedStudent = students.find(s => lower.includes(s.name.toLowerCase()));
+  if (mentionedStudent) {
+    return `👤 **Student Profile: ${mentionedStudent.name}**\n\n• **Attendance**: ${mentionedStudent.percentage}%\n• **Status**: ${mentionedStudent.percentage > 85 ? 'Excellent' : mentionedStudent.percentage > 60 ? 'Stable' : 'Needs Attention'}\n\nNote: Ye data aapke live dashboard se liya gaya hai.`;
   }
 
-  if (lower.includes('het')) {
-    return `👤 **Student Profile: Het**\n\n• **Attendance**: 72% (Low)\n• **Performance**: Math (45%), English (50%)\n• **Status**: Needs Attention\n• **Note**: Het ki attendance kam hone ki wajah se grades neeche ja rahe hain. Extra classes recommended.`;
-  }
-
-  // 3. Handle General Knowledge / ChatGPT-style queries
+  // Constant Fallbacks
   if (lower.includes('student') || lower.includes('kitne')) {
-    const countMatch = prompt.match(/Data: (\d+) students/);
-    const count = countMatch ? parseInt(countMatch[1]) : 2; 
-    const boys = Math.floor(count / 2);
-    const girls = count - boys;
-    
-    return `📊 Class Overview:\n\nTotal students: **${count}**\n• Boys: ${boys}\n• Girls: ${girls}\n\nAbhi is class mein attendance aur performance stable hai. Aapko kisi specific student (jaise **Rishi** ya **Het**) ke baare mein janna hai?`;
+    return `📊 Class Overview:\n\nTotal students: **${students.length}**\n\nAapko kisi specific student ke baare mein janna hai ya fir attendance report chahiye?`;
   }
 
   if (lower === 'ha' || lower === 'yes' || lower === 'yeah') {
-    return `Ji bilkul! Aap **Rishi** (Topper) ya **Het** (Needs Attention) ke baare mein pooch sakte hain, ya phir پوری class ka report card mang sakte hain.`;
+    return `Theek hai! Main aapko ${students[0]?.name || 'students'} ki detail de sakta hoon ya topper list bata sakta hoon. Aap kya dekhna chahenge?`;
   }
 
   if (lower.includes('hello') || lower.includes('hi ') || lower.includes('hey')) {
-    return `👋 Namaste! I am your EduBase AI assistant. \n\nMain aapki class analytics ya padoash ke sawalon mein help kar sakta hoon. Aaj kaise madad karoon?`;
-  }
-
-  if (lower.includes('attendance') || lower.includes('presents')) {
-    if (lower.includes('kam') || lower.includes('low') || lower.includes('absent')) {
-      return `📉 Sabse kam attendance **Het** ki hai (72%). Wo pichle hafte 3 din absent tha. \n\nKya main uske parents ko message draft karun?`;
-    }
-    return `📊 Attendance Update:\n• Rishi: 95%\n• Het: 72%\n\nAverage class attendance 83.5% hai.`;
-  }
-
-  if (lower.includes('topper') || lower.includes('sabse accha') || lower.includes('top')) {
-    return `🏆 Class Topper **Rishi** hai, jinka Science aur Math dono mein score 90% se upar hai.`;
+    return `👋 Namaste! I am your EduBase AI assistant. \n\nMain aapke live class data (${students.length} students) ke basis pe analytics report de sakta hoon. Bolie kaise madad karoon?`;
   }
 
   // 4. Smart Universal Fallback
-  return `🤖 EduBase AI Assistant\n\nMain aapke is sawal par kaam kar sakta hoon: "${cleanQuery.slice(0, 50)}..."\n\nAs your assistant, main ye sab bata sakta hoon:\n• 📊 Student Data Analysis (Rishi, Het, etc.)\n• 📘 Academic Support (Hinglish mein)\n• 🌍 General Knowledge\n\nAap details puchiye, main turant jawab dunga!`;
+  return `🤖 EduBase AI Assistant\n\nMain aapke is sawal par kaam kar sakta hoon: "${cleanQuery.slice(0, 50)}..."\n\nMain aapke live data se ye bata sakta hoon:\n• 📊 Lowest Attendance (${lowest?.name || 'Search'})\n• 🏆 Class Topper (${topper?.name || 'Search'})\n• 📘 Academic Support\n\nAap be-jhijhak puchiye!`;
 }
