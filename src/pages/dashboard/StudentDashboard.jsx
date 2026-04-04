@@ -3,6 +3,10 @@ import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
+import React from 'react';
+
+// Lazy load assessment components
+const StudentAssessmentView = React.lazy(() => import('../../components/grading/StudentAssessmentView'));
 
 export default function StudentDashboard() {
   const { user, getAuthHeaders, API_URL } = useAuth();
@@ -51,16 +55,37 @@ export default function StudentDashboard() {
   // Bulk JSON Import
   const [bulkImportForm, setBulkImportForm] = useState({ modelName: 'Result', rawJson: '' });
   const [bulkImporting, setBulkImporting] = useState(false);
+  
+  // Active Session
+  const [activeSession, setActiveSession] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(false);
+  const [attendanceStep, setAttendanceStep] = useState('choice'); // 'choice' | 'face' | 'self' | 'success'
+
+  // Assessments (Feature 2)
+  const [assessments, setAssessments] = useState([]);
+  const [selectedAssessment, setSelectedAssessment] = useState(null);
+  const [submissions, setSubmissions] = useState([]);
 
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const periods = [1, 2, 3, 4, 5, 6, 7, 8];
 
-  /* ── Fetchers ── */
+  /* ── Fetchers (with mock fallback) ── */
   const fetchAttendance = async () => {
     if (!studentId) return;
     try {
       const res = await axios.get(`${API_URL}/student/attendance/${studentId}`, { headers });
       setAttData(res.data.data || { records: [], totalPresent: 0, totalAbsent: 0, total: 0, percentage: 0 });
+    } catch (err) {
+      if (!err.response) setAttData({ records: [], totalPresent: 18, totalAbsent: 4, total: 22, percentage: 82 });
+      console.error(err);
+    }
+  };
+
+  const fetchAssessments = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/student/assessments`, { headers });
+      setAssessments(res.data.data || []);
+      setSubmissions(res.data.submissions || []);
     } catch (err) { console.error(err); }
   };
 
@@ -77,7 +102,17 @@ export default function StudentDashboard() {
     try {
       const res = await axios.get(`${API_URL}/student/results/${studentId}`, { headers });
       setResults(res.data.data || { results: [], overallPercentage: 0 });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      if (!err.response) setResults({
+        overallPercentage: 78,
+        results: [
+          { subject: 'Mathematics', marksObtained: 85, totalMarks: 100, grade: 'A', examType: 'Mid-Term', date: '2026-02-15' },
+          { subject: 'Science', marksObtained: 72, totalMarks: 100, grade: 'B', examType: 'Mid-Term', date: '2026-02-16' },
+          { subject: 'English', marksObtained: 78, totalMarks: 100, grade: 'B', examType: 'Mid-Term', date: '2026-02-17' },
+        ],
+      });
+      console.error(err);
+    }
   };
 
   const fetchLeaves = async () => {
@@ -89,10 +124,35 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
-    if (studentId) { fetchAttendance(); fetchLeaves(); }
+    if (studentId) { 
+      fetchAttendance(); 
+      fetchLeaves(); 
+      fetchAssessments();
+    }
   }, [studentId]);
   useEffect(() => { if (activeSection === 'my-timetable') fetchTimetable(); }, [activeSection, cls, div]);
   useEffect(() => { if (activeSection === 'my-results') fetchResults(); }, [activeSection, studentId]);
+
+  const checkActiveSession = async () => {
+    if (!cls || !div) return;
+    setCheckingSession(true);
+    try {
+      // We'll reuse the attendance/mark logic or a specific check endpoint
+      // For now, let's just try to fetch if a session exists for this class/div
+      const res = await axios.get(`${API_URL}/teacher/attendance/session/check?class=${cls}&division=${div}`, { headers });
+      setActiveSession(res.data.data);
+    } catch (err) {
+      setActiveSession(null);
+    } finally {
+      setCheckingSession(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSection === 'mark-attendance') {
+      checkActiveSession();
+    }
+  }, [activeSection, cls, div]);
 
   /* ── Handlers ── */
   const handleSubmitLeave = async () => {
@@ -160,7 +220,11 @@ export default function StudentDashboard() {
     return record ? record.status : null;
   };
 
-  const tabs = ['overview', 'my-attendance', 'my-timetable', 'my-results', 'leave-apply', 'raw-json'];
+  const tabs = ['overview', 'mark-attendance', 'assessments', 'my-attendance', 'my-timetable', 'my-results', 'leave-apply', 'raw-json'];
+
+  // Import new components
+  const FaceAttendance = React.lazy(() => import('../../components/attendance/FaceAttendance'));
+  const SelfMarkAttendance = React.lazy(() => import('../../components/attendance/SelfMarkAttendance'));
 
   return (
     <div>
@@ -200,6 +264,140 @@ export default function StudentDashboard() {
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: 1.7 }}>
             Welcome, {user?.name || 'Student'}. Class {cls || '—'} / Division {div || '—'}. Use the tabs above to view your attendance, timetable, results, and submit leave applications.
           </p>
+        </div>
+      )}
+
+      {/* ═══ ASSESSMENTS (FEATURE 2) ═══ */}
+      {activeSection === 'assessments' && (
+        <div style={sectionStyle}>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', fontWeight: 600, marginBottom: '20px' }}>Digital Assessments</h3>
+          
+          <React.Suspense fallback={<p>Loading...</p>}>
+          {selectedAssessment ? (
+            <div>
+              <button 
+                onClick={() => setSelectedAssessment(null)} 
+                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginBottom: '15px' }}
+              >
+                ← Back to List
+              </button>
+              <StudentAssessmentView 
+                assessmentId={selectedAssessment._id} 
+                onComplete={() => { setSelectedAssessment(null); fetchAssessments(); }} 
+              />
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '20px' }}>
+              {assessments.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)' }}>No assessments assigned to you yet.</p>
+              ) : (
+                assessments.map(ass => {
+                  const submission = submissions.find(s => s.assessmentId === ass._id);
+                  return (
+                    <div key={ass._id} style={{ ...sectionStyle, background: 'var(--bg-deep)', marginBottom: 0 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <h4 style={{ margin: 0, fontSize: '1rem' }}>{ass.title}</h4>
+                        <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>{ass.subject}</span>
+                      </div>
+                      <p style={{ fontSize: '0.8rem', opacity: 0.8, marginBottom: '15px' }}> Due: {new Date(ass.dueDate).toLocaleDateString()}</p>
+                      
+                      {submission ? (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                           <span style={{ fontSize: '0.8rem', fontWeight: 600, color: submission.status === 'graded' ? 'var(--emerald)' : 'var(--warning)' }}>
+                             {submission.status === 'graded' ? `Score: ${submission.totalScore}` : 'Grading...'}
+                           </span>
+                           {submission.status === 'graded' && (
+                             <a 
+                               href={`${API_URL}/grading/report/${submission._id}`} 
+                               target="_blank" 
+                               rel="noreferrer"
+                               style={{ fontSize: '0.8rem', color: 'var(--cyan)', textDecoration: 'underline' }}
+                             >
+                               PDF Report
+                             </a>
+                           )}
+                        </div>
+                      ) : (
+                        <button 
+                          onClick={() => setSelectedAssessment(ass)}
+                          style={btnPrimary}
+                        >
+                          Start Assessment
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+          </React.Suspense>
+        </div>
+      )}
+
+      {/* ═══ MARK ATTENDANCE (FEATURE 1) ═══ */}
+      {activeSection === 'mark-attendance' && (
+        <div style={sectionStyle}>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.1rem', fontWeight: 600, marginBottom: '20px' }}>Mark Attendance</h3>
+          
+          {checkingSession ? (
+            <p>Checking for active sessions...</p>
+          ) : !activeSession ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div style={{ fontSize: '3rem', marginBottom: '10px' }}>⏳</div>
+              <h4>No active session found.</h4>
+              <p style={{ color: 'var(--text-secondary)' }}>Please wait for your teacher to start the attendance session.</p>
+              <button onClick={checkActiveSession} style={{ ...btnPrimary, marginTop: '20px' }}>Refresh Status</button>
+            </div>
+          ) : attendanceStep === 'choice' ? (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginTop: '20px' }}>
+              <div 
+                onClick={() => setAttendanceStep('face')}
+                style={{ ...sectionStyle, cursor: 'pointer', border: '2px solid transparent', transition: 'border-color 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--cyan)'}
+                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+              >
+                <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>📷</div>
+                <h4 style={{ margin: 0 }}>Face Recognition</h4>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>AI-powered identity verification via webcam.</p>
+              </div>
+              <div 
+                onClick={() => setAttendanceStep('self')}
+                style={{ ...sectionStyle, cursor: 'pointer', border: '2px solid transparent', transition: 'border-color 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.borderColor = 'var(--emerald)'}
+                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'transparent'}
+              >
+                <div style={{ fontSize: '2.5rem', marginBottom: '10px' }}>📍</div>
+                <h4 style={{ margin: 0 }}>Self-Mark (IP Check)</h4>
+                <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Fast check-in via school network verification.</p>
+              </div>
+            </div>
+          ) : attendanceStep === 'face' ? (
+            <React.Suspense fallback={<p>Loading camera...</p>}>
+              <FaceAttendance 
+                userClass={cls} 
+                userDivision={div} 
+                onComplete={() => { setAttendanceStep('success'); fetchAttendance(); }} 
+              />
+              <button onClick={() => setAttendanceStep('choice')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginTop: '10px' }}>← Back</button>
+            </React.Suspense>
+          ) : attendanceStep === 'self' ? (
+            <React.Suspense fallback={<p>Loading...</p>}>
+              <SelfMarkAttendance 
+                userClass={cls} 
+                userDivision={div} 
+                onComplete={() => { setAttendanceStep('success'); fetchAttendance(); }} 
+              />
+              <button onClick={() => setAttendanceStep('choice')} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginTop: '10px' }}>← Back</button>
+            </React.Suspense>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <div style={{ fontSize: '3rem', color: 'var(--emerald)', marginBottom: '10px' }}>✅</div>
+              <h4>Attendance Marked!</h4>
+              <p style={{ color: 'var(--text-secondary)' }}>You are all set for today.</p>
+              <button onClick={() => setAttendanceStep('choice')} style={{ ...btnPrimary, marginTop: '20px' }}>Done</button>
+            </div>
+          )}
         </div>
       )}
 

@@ -18,7 +18,7 @@ export default function Login() {
       return;
     }
     try {
-      const userData = await login(form.email, form.password);
+      const userData = await login(form.email, form.password, role);
       success(`Welcome back! Logged in as ${userData.role}`);
       const roleRoutes = { teacher: '/dashboard/teacher', student: '/dashboard/student', admin: '/dashboard/admin' };
       navigate(roleRoutes[userData.role] || '/dashboard');

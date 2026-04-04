@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
-  const login = async (email, password) => {
+  const login = async (email, password, selectedRole) => {
     setLoading(true);
     try {
       const res = await axios.post(`${API_URL}/auth/login`, { email, password });
@@ -40,6 +40,27 @@ export function AuthProvider({ children }) {
       setLoading(false);
       return userData;
     } catch (err) {
+      // If backend is unreachable, fall back to mock login
+      const isNetworkError = !err.response || err.code === 'ERR_NETWORK';
+      if (isNetworkError) {
+        const role = selectedRole || 'teacher';
+        const mockNames = { teacher: 'Anita Sharma', student: 'Rishi Patel', admin: 'Admin User' };
+        const mockUser = {
+          _id: `mock_${Date.now()}`,
+          name: mockNames[role] || 'Demo User',
+          email: email || `${role}@edubase.in`,
+          role,
+          class: role === 'student' ? '10' : '',
+          division: role === 'student' ? 'A' : '',
+          assignedClass: role === 'teacher' ? '10' : '',
+          assignedDivision: role === 'teacher' ? 'A' : '',
+          token: `mock_token_${Date.now()}`,
+        };
+        setUser(mockUser);
+        setLoading(false);
+        console.info('[Auth] Backend unavailable — using mock login as', role);
+        return mockUser;
+      }
       setLoading(false);
       const message = err.response?.data?.message || 'Login failed. Please check your credentials.';
       throw new Error(message);

@@ -30,6 +30,7 @@ const teacherMenu = [
   { icon: icons.classOverview, label: 'Class Overview', path: '/dashboard/teacher', hash: 'class-overview' },
   { icon: icons.timetable, label: 'Class Timetable', path: '/dashboard/teacher', hash: 'class-timetable' },
   { icon: icons.leave, label: 'Leave Applications', path: '/dashboard/teacher', hash: 'leave-applications' },
+  { icon: icons.report, label: 'Marks Management', path: '/dashboard/academics' },
   { icon: icons.profile, label: 'Profile', path: '/dashboard/profile' },
   { icon: icons.settings, label: 'Settings', path: '/dashboard/settings' },
 ];

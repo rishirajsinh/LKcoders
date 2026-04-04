@@ -79,26 +79,56 @@ export default function AdminDashboard() {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const periods = [1, 2, 3, 4, 5, 6, 7, 8];
 
-  /* ── Data fetchers ── */
+  /* ── Mock data for when backend is unavailable ── */
+  const MOCK_STUDENTS = [
+    { _id: 'm_s1', name: 'Aarav Sharma', email: 'aarav@edu.in', class: '10', division: 'A' },
+    { _id: 'm_s2', name: 'Priya Patel', email: 'priya@edu.in', class: '10', division: 'A' },
+    { _id: 'm_s3', name: 'Rohan Gupta', email: 'rohan@edu.in', class: '10', division: 'B' },
+    { _id: 'm_s4', name: 'Ananya Singh', email: 'ananya@edu.in', class: '9', division: 'A' },
+    { _id: 'm_s5', name: 'Vikram Reddy', email: 'vikram@edu.in', class: '9', division: 'B' },
+    { _id: 'm_s6', name: 'Sneha Joshi', email: 'sneha@edu.in', class: '10', division: 'A' },
+    { _id: 'm_s7', name: 'Arjun Mehta', email: 'arjun@edu.in', class: '10', division: 'B' },
+    { _id: 'm_s8', name: 'Kavya Nair', email: 'kavya@edu.in', class: '9', division: 'A' },
+  ];
+  const MOCK_TEACHERS = [
+    { _id: 'm_t1', name: 'Anita Sharma', email: 'anita@edu.in' },
+    { _id: 'm_t2', name: 'Rajesh Kumar', email: 'rajesh@edu.in' },
+    { _id: 'm_t3', name: 'Meera Iyer', email: 'meera@edu.in' },
+  ];
+
+  /* ── Data fetchers (with mock fallback) ── */
   const fetchStudents = async () => {
     try {
       const res = await axios.get(`${API_URL}/admin/students`, { headers });
       setStudents(res.data.data || []);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      if (!err.response) setStudents(MOCK_STUDENTS);
+      console.error(err);
+    }
   };
 
   const fetchTeachers = async () => {
     try {
       const res = await axios.get(`${API_URL}/admin/teachers`, { headers });
       setTeachers(res.data.data || []);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      if (!err.response) setTeachers(MOCK_TEACHERS);
+      console.error(err);
+    }
   };
 
   const fetchAssignments = async () => {
     try {
       const res = await axios.get(`${API_URL}/admin/assignments`, { headers });
       setAssignments(res.data.data || []);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      if (!err.response) setAssignments([
+        { _id: 'm_a1', teacherId: MOCK_TEACHERS[0], class: '10', division: 'A', subject: 'Mathematics' },
+        { _id: 'm_a2', teacherId: MOCK_TEACHERS[1], class: '10', division: 'A', subject: 'Science' },
+        { _id: 'm_a3', teacherId: MOCK_TEACHERS[2], class: '10', division: 'B', subject: 'English' },
+      ]);
+      console.error(err);
+    }
   };
 
   const fetchAttendance = async () => {
@@ -108,7 +138,13 @@ export default function AdminDashboard() {
       if (attDiv) params.append('division', attDiv);
       const res = await axios.get(`${API_URL}/admin/attendance/summary?${params}`, { headers });
       setAttendanceSummary(res.data.data || { present: 0, absent: 0, records: [] });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      if (!err.response) setAttendanceSummary({
+        present: 6, absent: 2,
+        records: MOCK_STUDENTS.map((s, i) => ({ studentName: s.name, status: i < 6 ? 'present' : 'absent' })),
+      });
+      console.error(err);
+    }
   };
 
   const fetchTimetable = async () => {
@@ -123,7 +159,14 @@ export default function AdminDashboard() {
     try {
       const res = await axios.get(`${API_URL}/admin/calendar?month=${calMonth}&year=${calYear}`, { headers });
       setCalendarEvents(res.data.data || []);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      if (!err.response) setCalendarEvents([
+        { _id: 'm_e1', title: 'Mid-Term Exams', date: `${calYear}-${String(calMonth).padStart(2,'0')}-15`, type: 'Exam', description: 'Mid-term examinations begin' },
+        { _id: 'm_e2', title: 'Sports Day', date: `${calYear}-${String(calMonth).padStart(2,'0')}-22`, type: 'Event', description: 'Annual sports day' },
+        { _id: 'm_e3', title: 'Holiday', date: `${calYear}-${String(calMonth).padStart(2,'0')}-28`, type: 'Holiday', description: 'Public holiday' },
+      ]);
+      console.error(err);
+    }
   };
 
   useEffect(() => {
@@ -148,7 +191,20 @@ export default function AdminDashboard() {
       setNewStudent({ name: '', email: '', password: '', class: '', division: '' });
       fetchStudents();
     } catch (err) {
-      info(err.response?.data?.message || 'Failed to add student.');
+      if (!err.response || err.code === 'ERR_NETWORK') {
+        // Offline fallback — add to local state
+        setStudents(prev => [...prev, {
+          _id: `local_${Date.now()}`,
+          name: newStudent.name,
+          email: newStudent.email,
+          class: newStudent.class,
+          division: newStudent.division,
+        }]);
+        success('Student added locally (offline mode)');
+        setNewStudent({ name: '', email: '', password: '', class: '', division: '' });
+      } else {
+        info(err.response?.data?.message || 'Failed to add student.');
+      }
     }
   };
 
@@ -162,7 +218,18 @@ export default function AdminDashboard() {
       setNewTeacher({ name: '', email: '', password: '' });
       fetchTeachers();
     } catch (err) {
-      info(err.response?.data?.message || 'Failed to add teacher.');
+      if (!err.response || err.code === 'ERR_NETWORK') {
+        // Offline fallback — add to local state
+        setTeachers(prev => [...prev, {
+          _id: `local_${Date.now()}`,
+          name: newTeacher.name,
+          email: newTeacher.email,
+        }]);
+        success('Teacher added locally (offline mode)');
+        setNewTeacher({ name: '', email: '', password: '' });
+      } else {
+        info(err.response?.data?.message || 'Failed to add teacher.');
+      }
     }
   };
 

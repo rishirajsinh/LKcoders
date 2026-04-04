@@ -10,6 +10,7 @@ import TeacherDashboard from './pages/dashboard/TeacherDashboard';
 import StudentDashboard from './pages/dashboard/StudentDashboard';
 import AdminDashboard from './pages/dashboard/AdminDashboard';
 import ProfilePage from './pages/dashboard/ProfilePage';
+import AcademicDashboard from './pages/dashboard/AcademicDashboard';
 import './styles/globals.css';
 
 /* ─── Protected Route (redirects to /login if not authenticated) ─── */
@@ -140,6 +141,7 @@ function AppRoutes() {
         {/* Shared routes */}
         <Route path="settings" element={<SettingsPage />} />
         <Route path="profile" element={<ProfilePage />} />
+        <Route path="academics" element={<AcademicDashboard />} />
 
         {/* Any unknown /dashboard/* → redirect to role dashboard */}
         <Route path="*" element={<DashboardRedirect />} />

@@ -18,6 +18,8 @@ const adminRoutes = require('./routes/admin');
 const teacherRoutes = require('./routes/teacher');
 const studentApiRoutes = require('./routes/student');
 const profileRoutes = require('./routes/profile');
+const attendanceRoutes = require('./routes/attendance');
+const gradingRoutes = require('./routes/grading');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
@@ -26,6 +28,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/student', studentApiRoutes);
 app.use('/api/profile', profileRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/grading', gradingRoutes);
 
 // Database Connection
 mongoose.connect(process.env.MONGO_URI)

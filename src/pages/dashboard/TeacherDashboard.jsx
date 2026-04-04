@@ -4,6 +4,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useNotification } from '../../context/NotificationContext';
 import TeacherCoPilot from '../../components/teacher/TeacherCoPilot';
+import React from 'react';
+
+// Lazy load grading components
+const TeacherAssessmentForm = React.lazy(() => import('../../components/grading/TeacherAssessmentForm'));
+const GradeReviewDashboard = React.lazy(() => import('../../components/grading/GradeReviewDashboard'));
 
 export default function TeacherDashboard() {
   const { user, getAuthHeaders, API_URL, refreshUser } = useAuth();
@@ -43,6 +48,13 @@ export default function TeacherDashboard() {
   const [attRecords, setAttRecords] = useState({}); // { studentId: 'present'|'absent' }
   const [attAlreadySubmitted, setAttAlreadySubmitted] = useState(false);
   const [submittingAtt, setSubmittingAtt] = useState(false);
+  const [isSessionActive, setIsSessionActive] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(false);
+
+  // Assessments
+  const [assessments, setAssessments] = useState([]);
+  const [selectedAssessment, setSelectedAssessment] = useState(null);
+  const [showAssessmentForm, setShowAssessmentForm] = useState(false);
 
   const [overview, setOverview] = useState({ totalStudents: 0, averageAttendance: 0, students: [] });
 
@@ -57,33 +69,48 @@ export default function TeacherDashboard() {
   const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const periods = [1, 2, 3, 4, 5, 6, 7, 8];
 
+  /* ── Mock data for offline mode ── */
+  const MOCK_STUDENTS = [
+    { _id: 'ms1', name: 'Aarav Sharma' }, { _id: 'ms2', name: 'Priya Patel' },
+    { _id: 'ms3', name: 'Rohan Gupta' }, { _id: 'ms4', name: 'Ananya Singh' },
+    { _id: 'ms5', name: 'Vikram Reddy' }, { _id: 'ms6', name: 'Sneha Joshi' },
+    { _id: 'ms7', name: 'Arjun Mehta' }, { _id: 'ms8', name: 'Kavya Nair' },
+  ];
+
   /* ── Fetchers ── */
-  const fetchStudents = async () => {
+  const syncAttendanceData = async () => {
     if (!cls || !div) return;
     try {
-      const res = await axios.get(`${API_URL}/teacher/students?class=${cls}&division=${div}`, { headers });
-      const list = res.data.data || [];
-      setStudents(list);
-      // default all to absent
-      const defaultRec = {};
-      list.forEach(s => { defaultRec[s._id] = 'absent'; });
-      setAttRecords(defaultRec);
-    } catch (err) { console.error(err); }
+      const [studentsRes, attendanceRes] = await Promise.all([
+        axios.get(`${API_URL}/teacher/students?class=${cls}&division=${div}`, { headers }),
+        axios.get(`${API_URL}/teacher/attendance?date=${attDate}&class=${cls}&division=${div}`, { headers })
+      ]);
+      const studentList = studentsRes.data.data || [];
+      const existingAttendance = attendanceRes.data.data || [];
+      setStudents(studentList);
+      const mappedRecords = {};
+      studentList.forEach(s => {
+        const record = existingAttendance.find(r => (r.studentId?._id || r.studentId) === s._id);
+        mappedRecords[s._id] = record ? record.status : 'absent';
+      });
+      setAttRecords(mappedRecords);
+      setAttAlreadySubmitted(existingAttendance.length > 0);
+    } catch (err) {
+      if (!err.response || err.code === 'ERR_NETWORK') {
+        setStudents(MOCK_STUDENTS);
+        const mockRecs = {};
+        MOCK_STUDENTS.forEach((s, i) => { mockRecs[s._id] = i < 6 ? 'present' : 'absent'; });
+        setAttRecords(mockRecs);
+      }
+      console.error('syncAttendanceData error:', err);
+    }
   };
 
-  const fetchExistingAttendance = async () => {
+  const fetchAssessments = async () => {
     if (!cls || !div) return;
     try {
-      const res = await axios.get(`${API_URL}/teacher/attendance?date=${attDate}&class=${cls}&division=${div}`, { headers });
-      const existing = res.data.data || [];
-      if (existing.length > 0) {
-        setAttAlreadySubmitted(true);
-        const rec = {};
-        existing.forEach(r => { rec[r.studentId?._id || r.studentId] = r.status; });
-        setAttRecords(prev => ({ ...prev, ...rec }));
-      } else {
-        setAttAlreadySubmitted(false);
-      }
+      const res = await axios.get(`${API_URL}/grading/assessment?class=${cls}&division=${div}`, { headers });
+      setAssessments(res.data.data || []);
     } catch (err) { console.error(err); }
   };
 
@@ -92,7 +119,13 @@ export default function TeacherDashboard() {
     try {
       const res = await axios.get(`${API_URL}/teacher/class-overview?class=${cls}&division=${div}`, { headers });
       setOverview(res.data.data || { totalStudents: 0, averageAttendance: 0, students: [] });
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      if (!err.response) setOverview({
+        totalStudents: MOCK_STUDENTS.length, averageAttendance: 82,
+        students: MOCK_STUDENTS.map((s, i) => ({ _id: s._id, name: s.name, present: 15 + i, absent: 3 - (i % 3), percentage: 75 + (i * 3) })),
+      });
+      console.error(err);
+    }
   };
 
   const fetchTimetable = async () => {
@@ -106,10 +139,7 @@ export default function TeacherDashboard() {
   // Sync profile on mount
   useEffect(() => {
     if (refreshUser) {
-      refreshUser().then(updatedUser => {
-        if (updatedUser?.assignedClass) setClassInput(updatedUser.assignedClass);
-        if (updatedUser?.assignedDivision) setDivInput(updatedUser.assignedDivision);
-      });
+      refreshUser().catch(() => {});
     }
   }, []);
 
@@ -123,12 +153,35 @@ export default function TeacherDashboard() {
     } catch (err) { console.error(err); }
   };
 
-  // Load students when class/div changes
-  useEffect(() => { if (cls && div) { fetchStudents(); } }, [cls, div]);
-  useEffect(() => { if (activeSection === 'mark-attendance' && cls && div) { fetchStudents(); fetchExistingAttendance(); } }, [activeSection, attDate, cls, div]);
-  useEffect(() => { if (activeSection === 'class-overview' && cls && div) fetchOverview(); }, [activeSection, cls, div]);
-  useEffect(() => { if (activeSection === 'class-timetable' && cls && div) fetchTimetable(); }, [activeSection, cls, div]);
-  useEffect(() => { if (activeSection === 'leave-applications' && cls && div) fetchLeaves(); }, [activeSection, leaveFilter, cls, div]);
+  // Synchronize dynamic data on class/division/date change
+  useEffect(() => { 
+    if (cls && div) { 
+      syncAttendanceData(); 
+      fetchOverview(); 
+      fetchTimetable();
+      fetchLeaves();
+      fetchAssessments();
+    } 
+  }, [cls, div, attDate]); 
+
+  const handleToggleSession = async () => {
+    setSessionLoading(true);
+    try {
+      if (isSessionActive) {
+        await axios.post(`${API_URL}/attendance/session/stop`, { class: cls, division: div }, { headers });
+        success('Attendance session stopped.');
+        setIsSessionActive(false);
+      } else {
+        await axios.post(`${API_URL}/attendance/session/start`, { class: cls, division: div }, { headers });
+        success('Attendance session started! Students can now mark themselves.');
+        setIsSessionActive(true);
+      }
+    } catch (err) {
+      info(err.response?.data?.message || 'Failed to toggle session.');
+    } finally {
+      setSessionLoading(false);
+    }
+  };
 
   /* ── Handlers ── */
   const handleSubmitAttendance = async () => {
@@ -176,7 +229,7 @@ export default function TeacherDashboard() {
   const presentCount = Object.values(attRecords).filter(v => v === 'present').length;
   const absentCount = students.length - presentCount;
 
-  const tabs = ['overview', 'mark-attendance', 'class-overview', 'class-timetable', 'leave-applications'];
+  const tabs = ['overview', 'mark-attendance', 'assessments', 'class-overview', 'class-timetable', 'leave-applications'];
 
   const needsClassSetup = !cls || !div;
 
@@ -260,6 +313,31 @@ export default function TeacherDashboard() {
               Attendance already submitted for {attDate}. You can update it by re-submitting.
             </div>
           )}
+
+          {/* Automated Attendance Controls */}
+          <div style={{ ...sectionStyle, background: 'var(--bg-deep)', marginBottom: '24px', borderLeft: `4px solid ${isSessionActive ? 'var(--emerald)' : 'var(--text-muted)'}` }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h4 style={{ margin: 0, fontSize: '0.95rem' }}>Automated Attendance Session</h4>
+                <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                  {isSessionActive 
+                    ? 'Session is LIVE. Students can mark attendance via Face ID or IP Check.' 
+                    : 'Start a session to allow students to mark themselves present.'}
+                </p>
+              </div>
+              <button 
+                onClick={handleToggleSession} 
+                disabled={sessionLoading}
+                style={{ 
+                  ...btnPrimary, 
+                  background: isSessionActive ? 'var(--danger)' : 'var(--emerald)',
+                  opacity: sessionLoading ? 0.7 : 1
+                }}
+              >
+                {sessionLoading ? 'Please wait...' : (isSessionActive ? 'Stop Session' : 'Start Session')}
+              </button>
+            </div>
+          </div>
 
           {students.length === 0 ? (
             <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No students found for Class {cls} / {div}.</p>
@@ -499,6 +577,48 @@ export default function TeacherDashboard() {
               </tbody>
             </table>
           )}
+        </div>
+      )}
+
+      {/* ═══ ASSESSMENTS (FEATURE 2) ═══ */}
+      {activeSection === 'assessments' && (
+        <div style={sectionStyle}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1rem', fontWeight: 600 }}>Assessments & Grading</h3>
+            <button 
+              onClick={() => { setShowAssessmentForm(!showAssessmentForm); setSelectedAssessment(null); }} 
+              style={btnPrimary}
+            >
+              {showAssessmentForm ? 'View List' : '+ New Assessment'}
+            </button>
+          </div>
+
+          <React.Suspense fallback={<p>Loading...</p>}>
+            {showAssessmentForm ? (
+              <TeacherAssessmentForm onComplete={() => { setShowAssessmentForm(false); fetchAssessments(); }} />
+            ) : selectedAssessment ? (
+              <div>
+                <button onClick={() => setSelectedAssessment(null)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', marginBottom: '15px' }}>← Back to List</button>
+                <GradeReviewDashboard assessmentId={selectedAssessment._id} />
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+                {assessments.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)' }}>No assessments created yet.</p>
+                ) : (
+                  assessments.map(ass => (
+                    <div key={ass._id} style={{ ...sectionStyle, background: 'var(--bg-deep)', cursor: 'pointer' }} onClick={() => setSelectedAssessment(ass)}>
+                      <h4 style={{ margin: 0, fontSize: '0.95rem' }}>{ass.title}</h4>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '4px 0' }}>{ass.subject} | Due: {new Date(ass.dueDate).toLocaleDateString()}</p>
+                      <div style={{ marginTop: '12px', fontSize: '0.75rem', fontWeight: 600, color: 'var(--primary)' }}>
+                        Review Submissions →
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </React.Suspense>
         </div>
       )}
 

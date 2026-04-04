@@ -20,13 +20,24 @@ const protect = async (req, res, next) => {
   return res.status(401).json({ message: 'Not authorized, no token' });
 };
 
-const authorize = (...roles) => {
+const checkRole = (roles) => {
   return (req, res, next) => {
-    if (!roles.includes(req.user.role)) {
+    // Standardize to array
+    const allowedRoles = Array.isArray(roles) ? roles : [roles];
+    // Convert to lowercase to match model
+    const normalizedRoles = allowedRoles.map(r => r.toLowerCase());
+    
+    if (!normalizedRoles.includes(req.user.role)) {
       return res.status(403).json({ message: `User role ${req.user.role} is not authorized` });
     }
     next();
   };
 };
 
-module.exports = { protect, authorize };
+const authorize = (...roles) => {
+  // Flatten in case an array was passed as first arg
+  const flatRoles = roles.flat();
+  return checkRole(flatRoles);
+};
+
+module.exports = { protect, checkRole, authorize };
