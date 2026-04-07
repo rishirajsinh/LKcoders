@@ -32,9 +32,27 @@ app.use('/api/attendance', attendanceRoutes);
 app.use('/api/grading', gradingRoutes);
 
 // Database Connection
-mongoose.connect(process.env.MONGO_URI)
-.then(() => console.log('✅ Connected to MongoDB Atlas'))
-.catch((err) => console.error('❌ MongoDB Connection Error:', err));
+const mongoURI = process.env.MONGO_URI;
+
+if (!mongoURI) {
+  console.error('❌ CRITICAL ERROR: MONGO_URI is not defined in environment variables!');
+} else {
+  console.log('📡 Attempting to connect to MongoDB...');
+  // Mask the password for security in logs
+  const maskedURI = mongoURI.replace(/:([^@]+)@/, ':****@');
+  console.log(`🔗 Target: ${maskedURI}`);
+
+  mongoose.connect(mongoURI, {
+    serverSelectionTimeoutMS: 5000, // Fail fast if no connection
+  })
+  .then(() => console.log('✅ Connected to MongoDB Atlas'))
+  .catch((err) => {
+    console.error('❌ MongoDB Connection Error Details:');
+    console.error(`- Message: ${err.message}`);
+    console.error(`- Code: ${err.code}`);
+    console.error(`- Reason: ${err.reason || 'Unknown'}`);
+  });
+}
 
 // Basic route
 app.get('/api', (req, res) => res.json({ msg: 'EduFlow AI Backend API is running' }));
