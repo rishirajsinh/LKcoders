@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+
+Disallow: /AdminDashboard
+Disallow: /TeacherDashboard
+
+Sitemap: https://lkedubase.netlify.app/sitemap.xml
